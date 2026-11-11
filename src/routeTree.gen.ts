@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DockRouteImport } from './routes/dock'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as ApiChannelKeyRouteImport } from './routes/api/channel.$key'
 import { Route as ApiChannelKeySplatRouteImport } from './routes/api/channel.$key.$'
@@ -17,6 +18,11 @@ import { Route as ApiChannelKeySplatRouteImport } from './routes/api/channel.$ke
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DockRoute = DockRouteImport.update({
+  id: '/dock',
+  path: '/dock',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SetupRoute = SetupRouteImport.update({
@@ -37,12 +43,14 @@ const ApiChannelKeySplatRoute = ApiChannelKeySplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dock': typeof DockRoute
   '/setup': typeof SetupRoute
   '/api/channel/$key': typeof ApiChannelKeyRouteWithChildren
   '/api/channel/$key/$': typeof ApiChannelKeySplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dock': typeof DockRoute
   '/setup': typeof SetupRoute
   '/api/channel/$key': typeof ApiChannelKeyRouteWithChildren
   '/api/channel/$key/$': typeof ApiChannelKeySplatRoute
@@ -50,20 +58,29 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dock': typeof DockRoute
   '/setup': typeof SetupRoute
   '/api/channel/$key': typeof ApiChannelKeyRouteWithChildren
   '/api/channel/$key/$': typeof ApiChannelKeySplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/setup' | '/api/channel/$key' | '/api/channel/$key/$'
+  fullPaths:
+    '/' | '/dock' | '/setup' | '/api/channel/$key' | '/api/channel/$key/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/setup' | '/api/channel/$key' | '/api/channel/$key/$'
-  id: '__root__' | '/' | '/setup' | '/api/channel/$key' | '/api/channel/$key/$'
+  to: '/' | '/dock' | '/setup' | '/api/channel/$key' | '/api/channel/$key/$'
+  id:
+    | '__root__'
+    | '/'
+    | '/dock'
+    | '/setup'
+    | '/api/channel/$key'
+    | '/api/channel/$key/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DockRoute: typeof DockRoute
   SetupRoute: typeof SetupRoute
   ApiChannelKeyRoute: typeof ApiChannelKeyRouteWithChildren
 }
@@ -75,6 +92,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dock': {
+      id: '/dock'
+      path: '/dock'
+      fullPath: '/dock'
+      preLoaderRoute: typeof DockRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/setup': {
@@ -115,6 +139,7 @@ const ApiChannelKeyRouteWithChildren = ApiChannelKeyRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DockRoute: DockRoute,
   SetupRoute: SetupRoute,
   ApiChannelKeyRoute: ApiChannelKeyRouteWithChildren,
 }
