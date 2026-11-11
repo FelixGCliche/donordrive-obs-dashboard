@@ -6,13 +6,19 @@ import type {
 
 import { DOCK_KEY_HEADER } from './channelPaths'
 import { DEDUPE_LIMIT, REPLAY_LIMIT, selectReplay } from './eventBuffer'
-import type { Marks, RelayEvent, ServerFrame } from './protocol'
-import { relayEventSchema } from './protocol'
+import type { MarkKind, MarksState } from './marksState'
+import { applyMarksOp } from './marksState'
+import type { Marks, MarksOp, RelayEvent, ServerFrame } from './protocol'
+import { marksOpSchema, relayEventSchema } from './protocol'
 
 // Runtime global in workerd; not part of the DOM lib this project type-checks against
 declare const WebSocketPair: typeof WorkerWebSocketPair
 
 type EventRow = { body: string }
+type MarkRow = { donation_id: string; kind: MarkKind }
+type MetaRow = { version: number; baselined: number }
+
+const markKinds: readonly MarkKind[] = ['read', 'fulfilled']
 
 const json = (body: unknown, status = 200): Response => Response.json(body, { status })
 
@@ -42,6 +48,24 @@ export class DockChannel {
         body TEXT NOT NULL
       )`
     )
+    this.ctx.storage.sql.exec(
+      `CREATE TABLE IF NOT EXISTS marks (
+        donation_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        at INTEGER NOT NULL,
+        PRIMARY KEY (kind, donation_id)
+      )`
+    )
+    this.ctx.storage.sql.exec(
+      `CREATE TABLE IF NOT EXISTS meta (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        version INTEGER NOT NULL,
+        baselined INTEGER NOT NULL
+      )`
+    )
+    this.ctx.storage.sql.exec(
+      'INSERT OR IGNORE INTO meta (id, version, baselined) VALUES (1, 0, 0)'
+    )
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -58,6 +82,12 @@ export class DockChannel {
     if (url.pathname === '/events') {
       if (request.method !== 'POST') return text('Method not allowed', 405)
       return this.publish(await readJson(request))
+    }
+
+    if (url.pathname === '/marks') {
+      if (request.method === 'GET') return json(this.readMarks())
+      if (request.method !== 'POST') return text('Method not allowed', 405)
+      return this.updateMarks(await readJson(request))
     }
 
     return text('Not found', 404)
@@ -131,8 +161,63 @@ export class DockChannel {
     return rows.reverse().map((row) => JSON.parse(row.body) as RelayEvent)
   }
 
+  private updateMarks(body: unknown): Response {
+    const parsed = marksOpSchema.safeParse(body)
+    if (!parsed.success) {
+      return json({ error: 'invalid_marks_op', issues: parsed.error.issues }, 400)
+    }
+
+    const { marks, changed } = this.ctx.storage.transactionSync(() => this.applyOp(parsed.data))
+    if (changed) this.broadcast({ kind: 'marks', marks })
+    return json(marks)
+  }
+
+  /** Runs inside a transaction: applies the op, persists the difference and bumps the version. */
+  private applyOp(op: MarksOp): { marks: Marks; changed: boolean } {
+    const current = this.readMarks()
+    // MVP-SHORTCUT(MVP-09): `baseline` marks every donation present on first use as read, once per key
+    const { state, changed } = applyMarksOp(current, op)
+    if (!changed) return { marks: current, changed }
+
+    const now = Date.now()
+    for (const kind of markKinds) {
+      const before = new Set(current[kind])
+      const after = new Set(state[kind])
+      for (const id of before) {
+        if (after.has(id)) continue
+        this.ctx.storage.sql.exec('DELETE FROM marks WHERE kind = ? AND donation_id = ?', kind, id)
+      }
+      for (const id of state[kind]) {
+        if (before.has(id)) continue
+        this.ctx.storage.sql.exec(
+          'INSERT INTO marks (donation_id, kind, at) VALUES (?, ?, ?)',
+          id,
+          kind,
+          now
+        )
+      }
+    }
+
+    const version = current.version + 1
+    this.ctx.storage.sql.exec(
+      'UPDATE meta SET version = ?, baselined = ? WHERE id = 1',
+      version,
+      state.baselined ? 1 : 0
+    )
+    return { marks: { ...state, version }, changed }
+  }
+
+  /** Current marks; each list is ordered oldest first. */
   private readMarks(): Marks {
-    return { version: 0, read: [], fulfilled: [], baselined: false }
+    const meta = this.ctx.storage.sql
+      .exec<MetaRow>('SELECT version, baselined FROM meta WHERE id = 1')
+      .one()
+    const state: MarksState = { read: [], fulfilled: [], baselined: meta.baselined === 1 }
+    const rows = this.ctx.storage.sql.exec<MarkRow>(
+      'SELECT donation_id, kind FROM marks ORDER BY at, rowid'
+    )
+    for (const row of rows) state[row.kind].push(row.donation_id)
+    return { version: meta.version, ...state }
   }
 
   private send(ws: WorkerWebSocket, frame: ServerFrame): void {
