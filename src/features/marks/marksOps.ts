@@ -41,3 +41,7 @@ export const applyMarksOp = (marks: Marks, op: MarksOp): Marks => {
     }
   }
 }
+
+/** Whether server marks should replace the cached state: only when they are not older. */
+export const shouldReplaceMarks = (cached: Marks | undefined, incoming: Marks): boolean =>
+  cached === undefined || incoming.version >= cached.version

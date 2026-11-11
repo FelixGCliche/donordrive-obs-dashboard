@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { Marks } from '@features/channel'
 
-import { applyMarksOp } from './marksOps'
+import { applyMarksOp, shouldReplaceMarks } from './marksOps'
 
 const marks: Marks = { version: 4, read: ['D1'], fulfilled: ['D2'], baselined: false }
 
@@ -38,5 +38,20 @@ describe('applyMarksOp', () => {
   test('does not mutate the input', () => {
     applyMarksOp(marks, { op: 'read', ids: ['D3'] })
     expect(marks.read).toEqual(['D1'])
+  })
+})
+
+describe('shouldReplaceMarks', () => {
+  test('replaces an empty cache', () => {
+    expect(shouldReplaceMarks(undefined, marks)).toBe(true)
+  })
+
+  test('replaces on a newer or equal version', () => {
+    expect(shouldReplaceMarks(marks, { ...marks, version: 5 })).toBe(true)
+    expect(shouldReplaceMarks(marks, { ...marks, read: [] })).toBe(true)
+  })
+
+  test('ignores an older version', () => {
+    expect(shouldReplaceMarks(marks, { ...marks, version: 3 })).toBe(false)
   })
 })

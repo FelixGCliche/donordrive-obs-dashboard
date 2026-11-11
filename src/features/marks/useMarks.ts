@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type { Marks, MarksOp } from '@features/channel'
+import { useChannel } from '@features/channel'
+import type { ChannelStatus, Marks, MarksOp, UseChannelResult } from '@features/channel'
 
 import { getMarks, updateMarks } from './marksApi'
-import { applyMarksOp } from './marksOps'
+import { applyMarksOp, shouldReplaceMarks } from './marksOps'
 
 export const marksQueryKey = (key: string | undefined) => ['marks', key] as const
 
@@ -13,6 +14,12 @@ export type UseMarksOptions = {
   key: string | undefined
   /** Ids of the donations the dock shows, newest first */
   donationIds: string[]
+  /**
+   * The dock's already-open channel (from `useChannel({ key })`). Pass it whenever the caller
+   * opens the channel itself, so the dock keeps a single socket. Without it, useMarks opens
+   * its own channel for `key`.
+   */
+  channel?: UseChannelResult
 }
 
 export type UseMarksResult = {
@@ -21,7 +28,9 @@ export type UseMarksResult = {
   isLoading: boolean
   /** Message of the last failed load or write, for an inline alert */
   error: string | undefined
-  /** false without a key or before marks load; writes are ignored then */
+  /** Status of the channel the marks sync through */
+  channelStatus: ChannelStatus
+  /** false without a key, before marks load or while the channel is not open; writes are ignored then */
   canWrite: boolean
   isRead: (id: string) => boolean
   isFulfilled: (id: string) => boolean
@@ -35,17 +44,39 @@ type MutationContext = { previous: Marks | undefined; optimistic: Marks | undefi
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Could not update marks'
 
-/** Loads the dock's marks and applies read/fulfilled changes optimistically. */
-export const useMarks = ({ key, donationIds }: UseMarksOptions): UseMarksResult => {
+/**
+ * Loads the dock's marks, applies read/fulfilled changes optimistically and keeps them in sync
+ * with every other dock through `{ kind: 'marks' }` channel frames.
+ */
+export const useMarks = ({ key, donationIds, channel }: UseMarksOptions): UseMarksResult => {
   const queryClient = useQueryClient()
   const queryKey = marksQueryKey(key)
   const [writeError, setWriteError] = useState<string>()
+
+  // Hooks can't be called conditionally, so the fallback channel always runs but gets no key
+  // (and opens no socket) when the caller passed its own channel.
+  const ownChannel = useChannel({ key: channel ? undefined : key })
+  const { status: channelStatus, subscribe } = channel ?? ownChannel
 
   const query = useQuery({
     queryKey,
     queryFn: () => getMarks({ data: { key: key ?? '' } }),
     enabled: Boolean(key),
+    // Channel frames keep the cache fresh; the channel resends full marks on every (re)connect
+    staleTime: Number.POSITIVE_INFINITY,
   })
+
+  useEffect(() => {
+    if (!key) return
+    const frameQueryKey = marksQueryKey(key)
+    return subscribe((frame) => {
+      if (frame.kind !== 'marks') return
+      const cached = queryClient.getQueryData<Marks>(frameQueryKey)
+      if (shouldReplaceMarks(cached, frame.marks)) {
+        queryClient.setQueryData(frameQueryKey, frame.marks)
+      }
+    })
+  }, [key, queryClient, subscribe])
 
   const mutation = useMutation<Marks, Error, MarksOp, MutationContext>({
     mutationFn: (op) => updateMarks({ data: { key: key ?? '', op } }),
@@ -65,12 +96,15 @@ export const useMarks = ({ key, donationIds }: UseMarksOptions): UseMarksResult 
       }
     },
     onSuccess: (marks) => {
-      queryClient.setQueryData(queryKey, marks)
+      // A newer channel frame may already be cached
+      if (shouldReplaceMarks(queryClient.getQueryData<Marks>(queryKey), marks)) {
+        queryClient.setQueryData(queryKey, marks)
+      }
     },
   })
 
   const marks = query.data
-  const canWrite = Boolean(key) && marks !== undefined
+  const canWrite = Boolean(key) && marks !== undefined && channelStatus === 'open'
   const { mutate } = mutation
 
   const readIds = useMemo(() => new Set(marks?.read), [marks?.read])
@@ -107,6 +141,7 @@ export const useMarks = ({ key, donationIds }: UseMarksOptions): UseMarksResult 
     marks,
     isLoading: query.isLoading,
     error: writeError ?? loadError,
+    channelStatus,
     canWrite,
     isRead,
     isFulfilled,
