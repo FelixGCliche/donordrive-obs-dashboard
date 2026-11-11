@@ -1,3 +1,6 @@
+export * from './Dock'
+export * from './dockAlert'
 export * from './dockSearch'
 export * from './model'
 export * from './selectDashboard'
+export * from './StatusBadge'
