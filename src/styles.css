@@ -1,3 +1,4 @@
+/* MVP-SHORTCUT(MVP-14): assumes OBS 31+ CEF (oklch, color-mix); no CSS fallback */
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
