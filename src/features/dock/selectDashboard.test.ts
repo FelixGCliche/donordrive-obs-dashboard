@@ -103,6 +103,17 @@ describe('selectDashboard', () => {
     expect(model.pendingCount).toBe(3)
   })
 
+  test("shows DonorDrive's claimed count when it covers older donations", () => {
+    const model = selectDashboard({
+      snapshot: {
+        ...snapshot,
+        incentives: [incentive({ id: 'i-old-claims', quantity: 1, quantityClaimed: 1 })],
+      },
+      now,
+    })
+    expect(model.incentives[0]).toMatchObject({ claimed: 1, pending: 0, status: 'sold_out' })
+  })
+
   test('derives incentive status from dates, quantity and isActive', () => {
     const model = selectDashboard({ snapshot, now })
     const statuses = Object.fromEntries(model.incentives.map((item) => [item.id, item.status]))

@@ -130,7 +130,7 @@ export const selectDashboard = ({
       amount: incentive.amount,
       status: incentiveStatus(incentive, knownClaimed, nowMs),
       quantity: incentive.quantity,
-      claimed,
+      claimed: knownClaimed,
       pending,
       startsAt: incentive.startsAt,
       endsAt: incentive.endsAt,
