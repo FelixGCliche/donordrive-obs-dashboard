@@ -1,0 +1,12 @@
+pre-commit:
+  parallel: false
+  commands:
+    lint:
+      run: bun run fix:lint
+      stage_fixed: true
+    format:
+      run: bun run fix:format
+      stage_fixed: true
+    ts-check:
+      run: bun run check:type
+      stage_fixed: true

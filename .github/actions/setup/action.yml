@@ -1,0 +1,26 @@
+name: Setup
+description: Set up the mise-managed dev environment, install dependencies, and build the project.
+
+runs:
+  using: composite
+  steps:
+    - uses: jdx/mise-action@v4
+      with:
+        install: true
+        cache: true
+
+    - name: Cache bun dependencies
+      uses: actions/cache@v6
+      with:
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock', '**/package.json') }}
+        restore-keys: |
+          ${{ runner.os }}-bun-
+
+    - name: Install dependencies
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    - name: Build
+      shell: bash
+      run: bun run build

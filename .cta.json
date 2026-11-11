@@ -1,0 +1,18 @@
+{
+  "bundler": "vite",
+  "projectName": "donordrive-obs-dashboard",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "bun",
+  "includeExamples": false,
+  "tailwind": true,
+  "projectPreset": "default",
+  "routerOnly": false,
+  "addOnOptions": {},
+  "git": false,
+  "install": true,
+  "intent": true,
+  "version": 1,
+  "framework": "react",
+  "chosenAddOns": ["cloudflare", "tanstack-query", "shadcn", "db", "tRPC"]
+}
