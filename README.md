@@ -17,6 +17,43 @@ To build this application for production:
 bun --bun run build
 ```
 
+# Project structure
+
+Code is organized by feature under `src/`. Folder names describe the feature or domain, never a technical layer (the one exception is `hooks/`).
+
+```
+src/
+  assets/  components/  hooks/
+  features/
+    donordrive/  dock/  marks/  sandbox/  setup/  channel/
+  routes/  __root.tsx  index.tsx  setup.tsx  dock.tsx  api/channel.$key.ts
+  router.tsx  server.ts  styles.css  routeTree.gen.ts  cloudflare-env.d.ts
+```
+
+- `assets/`: images, downloadable files, fonts and other static files.
+- `components/`: shadcn/ui primitives (`Button.tsx`, `ScrollArea.tsx`, …) plus the `cn.ts` helper. Flat, one PascalCase file per primitive, with a single `index.ts` barrel. No hooks and no `ui/` subfolder.
+- `features/`: business logic and complex components. Every domain gets its own flat kebab-case folder (no subfolders inside a feature):
+  - components are PascalCase `.tsx` (`DonationItem.tsx`);
+  - hooks are `useX.ts`;
+  - logic, schemas and constants are camelCase `.ts` (`fetchSnapshot.ts`, `protocol.ts`);
+  - tests sit next to the file they test as `<file>.test.ts`;
+  - fixtures go in a flat `snapshotFixtures.ts`, not a `fixtures/` folder.
+- `hooks/`: shared, generic hooks (`useLocalStorage`, `useNow`). Flat, one file per hook, with a single `index.ts` barrel. Feature-specific hooks stay in their feature.
+- `routes/`: file-based routing shells. Routes hold only `validateSearch`, guards and redirects, and render one feature export.
+- Plumbing stays at the `src/` root: `router.tsx`, `server.ts` (the custom Worker entry), `styles.css`, `routeTree.gen.ts` (generated, never edit it) and `cloudflare-env.d.ts`.
+- There are no global `lib/`, `utils/`, `schemas/`, `types/`, `api/`, `stores/` or `server/` folders.
+
+## Imports
+
+- Cross-folder imports use the path aliases `@assets`, `@components`, `@features`, `@hooks` and `@routes`.
+- Shared folders are imported through their barrel: `import { Button } from '@components'`, `import { useNow } from '@hooks'`.
+- Each `features/<name>/index.ts` barrel is that feature's public API (`export * from './X'`). Code outside a feature imports `@features/<name>`, never a file inside it.
+- Within a folder, siblings import each other relatively (`./Button`), never through the barrel.
+
+## MVP shortcuts
+
+Known MVP shortcuts are tracked in [`docs/mvp-shortcuts.md`](docs/mvp-shortcuts.md) and marked in code with `// MVP-SHORTCUT(MVP-xx): …`. List them with `rg "MVP-SHORTCUT"`.
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
