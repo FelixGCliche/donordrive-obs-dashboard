@@ -105,6 +105,16 @@ export const addSandboxDonation = (data: SandboxData, donation: Donation): Sandb
   donations: [donation, ...data.donations].slice(0, MAX_SANDBOX_DONATIONS),
 })
 
+export type AmountFieldResult = { ok: true; amount: number | null } | { ok: false }
+
+/** Parses the sandbox amount field: empty means a hidden amount, anything else must be ≥ 0. */
+export const parseAmountField = (text: string): AmountFieldResult => {
+  const trimmed = text.trim()
+  if (trimmed === '') return { ok: true, amount: null }
+  const amount = Number(trimmed)
+  return Number.isFinite(amount) && amount >= 0 ? { ok: true, amount } : { ok: false }
+}
+
 const randomNames = ['Ana', 'Brigitte', 'Cassidy', 'Jamison', 'Lena', 'Mei', 'Reinhardt', 'Zarya']
 const randomMessages = ['For the kids!', 'Good luck on stream', 'Keep it up!', 'GG']
 const randomHeroes = ['Mercy', 'Genji', 'Lúcio', 'Soldier: 76', 'Kiriko', 'Reaper']

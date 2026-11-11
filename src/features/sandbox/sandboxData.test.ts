@@ -9,6 +9,7 @@ import {
   EMPTY_SANDBOX,
   FALLBACK_INCENTIVES,
   MAX_SANDBOX_DONATIONS,
+  parseAmountField,
   randomDonationInput,
   sandboxDataSchema,
   sandboxStorageKey,
@@ -108,6 +109,22 @@ describe('randomDonationInput', () => {
     expect(input.incentiveId).toBe('I1')
     expect(input.amount).toBe(25)
     expect(input.message).toBe('Mercy')
+  })
+})
+
+describe('parseAmountField', () => {
+  test('treats an empty field as a hidden amount', () => {
+    expect(parseAmountField('  ')).toEqual({ ok: true, amount: null })
+  })
+
+  test('accepts non-negative numbers', () => {
+    expect(parseAmountField('12.5')).toEqual({ ok: true, amount: 12.5 })
+    expect(parseAmountField('0')).toEqual({ ok: true, amount: 0 })
+  })
+
+  test('rejects negatives and text', () => {
+    expect(parseAmountField('-1')).toEqual({ ok: false })
+    expect(parseAmountField('ten')).toEqual({ ok: false })
   })
 })
 
