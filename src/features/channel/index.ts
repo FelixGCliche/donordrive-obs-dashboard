@@ -1,4 +1,5 @@
 export * from './channelClient'
 export * from './DockChannel'
+export * from './handleChannelRequest'
 export * from './protocol'
 export * from './useChannel'

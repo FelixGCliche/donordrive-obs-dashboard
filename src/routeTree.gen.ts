@@ -10,33 +10,52 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiChannelKeyRouteImport } from './routes/api/channel.$key'
+import { Route as ApiChannelKeySplatRouteImport } from './routes/api/channel.$key.$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChannelKeyRoute = ApiChannelKeyRouteImport.update({
+  id: '/api/channel/$key',
+  path: '/api/channel/$key',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiChannelKeySplatRoute = ApiChannelKeySplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => ApiChannelKeyRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/channel/$key': typeof ApiChannelKeyRouteWithChildren
+  '/api/channel/$key/$': typeof ApiChannelKeySplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/channel/$key': typeof ApiChannelKeyRouteWithChildren
+  '/api/channel/$key/$': typeof ApiChannelKeySplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/channel/$key': typeof ApiChannelKeyRouteWithChildren
+  '/api/channel/$key/$': typeof ApiChannelKeySplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/channel/$key' | '/api/channel/$key/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/channel/$key' | '/api/channel/$key/$'
+  id: '__root__' | '/' | '/api/channel/$key' | '/api/channel/$key/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiChannelKeyRoute: typeof ApiChannelKeyRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +67,38 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/channel/$key': {
+      id: '/api/channel/$key'
+      path: '/api/channel/$key'
+      fullPath: '/api/channel/$key'
+      preLoaderRoute: typeof ApiChannelKeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/channel/$key/$': {
+      id: '/api/channel/$key/$'
+      path: '/$'
+      fullPath: '/api/channel/$key/$'
+      preLoaderRoute: typeof ApiChannelKeySplatRouteImport
+      parentRoute: typeof ApiChannelKeyRoute
+    }
   }
 }
 
+interface ApiChannelKeyRouteChildren {
+  ApiChannelKeySplatRoute: typeof ApiChannelKeySplatRoute
+}
+
+const ApiChannelKeyRouteChildren: ApiChannelKeyRouteChildren = {
+  ApiChannelKeySplatRoute: ApiChannelKeySplatRoute,
+}
+
+const ApiChannelKeyRouteWithChildren = ApiChannelKeyRoute._addFileChildren(
+  ApiChannelKeyRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiChannelKeyRoute: ApiChannelKeyRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
