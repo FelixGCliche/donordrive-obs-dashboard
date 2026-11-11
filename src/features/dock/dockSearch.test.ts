@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
+import { defaultParseSearch } from '@tanstack/react-router'
+
 import { dockSearchSchema } from './dockSearch'
 
 const validKey = 'abcdefghijklmnopqrstuv'
@@ -67,5 +69,16 @@ describe('dockSearchSchema', () => {
   test('accepts keys with dashes and underscores', () => {
     const key = 'A-b_C'.repeat(5)
     expect(dockSearchSchema.parse({ key }).key).toBe(key)
+  })
+})
+
+describe('dockSearchSchema with router-parsed search', () => {
+  test('keeps an all-digit pid that the router parsed as a number', () => {
+    const parsed = defaultParseSearch('?pid=565094&host=extralife&interval=30')
+    expect(dockSearchSchema.parse(parsed).pid).toBe('565094')
+  })
+
+  test('still drops a missing pid', () => {
+    expect(dockSearchSchema.parse(defaultParseSearch('?host=try')).pid).toBeUndefined()
   })
 })
