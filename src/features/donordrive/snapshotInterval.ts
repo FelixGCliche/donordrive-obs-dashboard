@@ -17,8 +17,8 @@ export type SnapshotIntervalInput = {
  * Milliseconds until the next poll, or `false` to stop polling.
  * - paused, or the participant doesn't exist: stop;
  * - success: the configured interval;
- * - errors: the interval doubled per consecutive failure, at least Retry-After,
- *   capped at 5 minutes.
+ * - errors: the interval doubled per consecutive failure, capped at 5 minutes,
+ *   but never sooner than Retry-After (which can be longer than the cap).
  */
 export const getSnapshotRefetchInterval = ({
   intervalSec,
@@ -34,5 +34,5 @@ export const getSnapshotRefetchInterval = ({
   const exponent = Math.min(Math.max(errorStreak, 1) - 1, 20)
   const backoff = base * 2 ** exponent
   const retryAfter = (lastError.retryAfterSec ?? 0) * 1000
-  return Math.min(MAX_BACKOFF_MS, Math.max(backoff, retryAfter))
+  return Math.max(Math.min(MAX_BACKOFF_MS, backoff), retryAfter)
 }

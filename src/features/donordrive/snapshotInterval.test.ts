@@ -43,7 +43,7 @@ describe('getSnapshotRefetchInterval', () => {
     expect(getSnapshotRefetchInterval({ intervalSec: 15, lastError: upstream })).toBe(15_000)
   })
 
-  test('waits at least Retry-After, still capped', () => {
+  test('waits at least Retry-After, even past the backoff cap', () => {
     const rateLimited = (retryAfterSec: number): SnapshotError => ({
       kind: 'rate_limited',
       message: 'slow down',
@@ -57,7 +57,7 @@ describe('getSnapshotRefetchInterval', () => {
     ).toBe(60_000)
     expect(
       getSnapshotRefetchInterval({ intervalSec: 15, lastError: rateLimited(3600), errorStreak: 1 })
-    ).toBe(MAX_BACKOFF_MS)
+    ).toBe(3_600_000)
   })
 
   test('schema errors back off too', () => {
