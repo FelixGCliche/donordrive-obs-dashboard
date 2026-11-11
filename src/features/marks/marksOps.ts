@@ -42,6 +42,16 @@ export const applyMarksOp = (marks: Marks, op: MarksOp): Marks => {
   }
 }
 
+/** Most ids one marks op may carry (matches the channel protocol's id list cap). */
+export const MAX_OP_IDS = 2000
+
+// MVP-SHORTCUT(MVP-09): the first load of a key marks every donation shown as read
+/** The baseline op to send for freshly loaded marks, or undefined when none is needed. */
+export const baselineOp = (marks: Marks, donationIds: string[]): MarksOp | undefined => {
+  if (marks.baselined || donationIds.length === 0) return undefined
+  return { op: 'baseline', ids: donationIds.slice(0, MAX_OP_IDS) }
+}
+
 /** Whether server marks should replace the cached state: only when they are not older. */
 export const shouldReplaceMarks = (cached: Marks | undefined, incoming: Marks): boolean =>
   cached === undefined || incoming.version >= cached.version

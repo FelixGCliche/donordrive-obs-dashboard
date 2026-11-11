@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { Marks } from '@features/channel'
 
-import { applyMarksOp, shouldReplaceMarks } from './marksOps'
+import { applyMarksOp, baselineOp, MAX_OP_IDS, shouldReplaceMarks } from './marksOps'
 
 const marks: Marks = { version: 4, read: ['D1'], fulfilled: ['D2'], baselined: false }
 
@@ -38,6 +38,22 @@ describe('applyMarksOp', () => {
   test('does not mutate the input', () => {
     applyMarksOp(marks, { op: 'read', ids: ['D3'] })
     expect(marks.read).toEqual(['D1'])
+  })
+})
+
+describe('baselineOp', () => {
+  test('baselines the shown donations when the key is new', () => {
+    expect(baselineOp(marks, ['D1', 'D2'])).toEqual({ op: 'baseline', ids: ['D1', 'D2'] })
+  })
+
+  test('skips an already baselined key or an empty feed', () => {
+    expect(baselineOp({ ...marks, baselined: true }, ['D1'])).toBeUndefined()
+    expect(baselineOp(marks, [])).toBeUndefined()
+  })
+
+  test('caps the ids to the protocol limit', () => {
+    const ids = Array.from({ length: MAX_OP_IDS + 5 }, (_, i) => `D${i}`)
+    expect(baselineOp(marks, ids)?.ids).toHaveLength(MAX_OP_IDS)
   })
 })
 

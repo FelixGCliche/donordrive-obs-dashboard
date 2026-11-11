@@ -5,7 +5,7 @@ import { useChannel } from '@features/channel'
 import type { ChannelStatus, Marks, MarksOp, UseChannelResult } from '@features/channel'
 
 import { getMarks, updateMarks } from './marksApi'
-import { applyMarksOp, shouldReplaceMarks } from './marksOps'
+import { applyMarksOp, baselineOp, MAX_OP_IDS, shouldReplaceMarks } from './marksOps'
 
 export const marksQueryKey = (key: string | undefined) => ['marks', key] as const
 
@@ -38,6 +38,9 @@ export type UseMarksResult = {
   markAllRead: () => void
   setFulfilled: (id: string, fulfilled: boolean) => void
 }
+
+/** Keys this session already sent a baseline for; the channel ignores repeats anyway. */
+const baselinedKeys = new Set<string>()
 
 type MutationContext = { previous: Marks | undefined; optimistic: Marks | undefined }
 
@@ -107,6 +110,15 @@ export const useMarks = ({ key, donationIds, channel }: UseMarksOptions): UseMar
   const canWrite = Boolean(key) && marks !== undefined && channelStatus === 'open'
   const { mutate } = mutation
 
+  // MVP-SHORTCUT(MVP-09): a new key starts with every donation shown marked read (once per key)
+  useEffect(() => {
+    if (!key || !marks || baselinedKeys.has(key)) return
+    const op = baselineOp(marks, donationIds)
+    if (!op) return
+    baselinedKeys.add(key)
+    mutate(op)
+  }, [donationIds, key, marks, mutate])
+
   const readIds = useMemo(() => new Set(marks?.read), [marks?.read])
   const fulfilledIds = useMemo(() => new Set(marks?.fulfilled), [marks?.fulfilled])
 
@@ -123,7 +135,7 @@ export const useMarks = ({ key, donationIds, channel }: UseMarksOptions): UseMar
 
   const markAllRead = useCallback(() => {
     if (!canWrite) return
-    const ids = donationIds.filter((id) => !readIds.has(id))
+    const ids = donationIds.filter((id) => !readIds.has(id)).slice(0, MAX_OP_IDS)
     if (ids.length > 0) mutate({ op: 'read', ids })
   }, [canWrite, donationIds, mutate, readIds])
 
