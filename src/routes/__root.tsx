@@ -1,10 +1,34 @@
 import { TanStackDevtools } from '@tanstack/react-devtools'
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+import type { QueryClient } from '@tanstack/react-query'
+import {
+  HeadContent,
+  Scripts,
+  createRootRouteWithContext,
+  useRouterState,
+} from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 
 import appCss from '../styles.css?url'
 
-export const Route = createRootRoute({
+type RouterContext = {
+  queryClient: QueryClient
+}
+
+const Devtools = () => {
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+
+  // The OBS dock is a tiny embedded browser; keep it free of devtools
+  if (pathname.startsWith('/dock')) return null
+
+  return (
+    <TanStackDevtools
+      config={{ position: 'bottom-right' }}
+      plugins={[{ name: 'TanStack Router', render: <TanStackRouterDevtoolsPanel /> }]}
+    />
+  )
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
@@ -20,10 +44,7 @@ export const Route = createRootRoute({
       </head>
       <body>
         {children}
-        <TanStackDevtools
-          config={{ position: 'bottom-right' }}
-          plugins={[{ name: 'TanStack Router', render: <TanStackRouterDevtoolsPanel /> }]}
-        />
+        {import.meta.env.DEV && <Devtools />}
         <Scripts />
       </body>
     </html>
