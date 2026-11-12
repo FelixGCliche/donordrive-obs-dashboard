@@ -1,0 +1,3 @@
+# MVP-SHORTCUT(MVP-13): `bun test` runs unit tests of pure functions only; no end-to-end or component tests
+[test]
+preload = ["./src/testPreload.ts"]
