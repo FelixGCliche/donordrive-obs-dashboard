@@ -50,8 +50,8 @@ describe('activityItemEvents', () => {
     const events = activityItemEvents(
       item('D2', {
         isTest: true,
-        message: 'mercy',
-        incentive: { id: 'I1', description: 'Pick a hero', isFulfilled: false },
+        message: 'option b',
+        incentive: { id: 'I1', description: 'Choose an option', isFulfilled: false },
       }),
       'P1'
     )
@@ -64,9 +64,9 @@ describe('activityItemEvents', () => {
       donationId: 'D2',
       displayName: 'Ana',
       amount: 25,
-      message: 'mercy',
+      message: 'option b',
       incentiveId: 'I1',
-      incentiveDescription: 'Pick a hero',
+      incentiveDescription: 'Choose an option',
     })
   })
 
