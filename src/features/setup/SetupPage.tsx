@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@comp
 import { buildChannelUrl, buildDockUrl } from './buildDockUrl'
 import { useDockKey } from './dockKey'
 import { DockKeyCard, maskKey } from './DockKeyCard'
+import { IncentiveList } from './IncentiveList'
 import { SetupForm, isValidPid } from './SetupForm'
 import { UrlOutput } from './UrlOutput'
 import { useSetupConfig } from './useSetupConfig'
@@ -52,6 +53,19 @@ export const SetupPage = () => {
         </CardHeader>
         <CardContent className="grid gap-6">
           <SetupForm values={config} onChange={setConfig} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Incentives</CardTitle>
+          <CardDescription>
+            Third-party apps receive every redeemed incentive. Give an app the IDs of the incentives
+            it should react to.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <IncentiveList host={config.host} pid={pid} />
         </CardContent>
       </Card>
 
