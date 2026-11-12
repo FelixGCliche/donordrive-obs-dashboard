@@ -5,7 +5,7 @@ export const DOCK_KEY_PATTERN = /^[A-Za-z0-9_-]{22,64}$/
 
 export const RELAY_PROTOCOL_VERSION = 1
 
-// MVP-SHORTCUT(MVP-10): only two event types; the hero name is the raw donor message
+// MVP-SHORTCUT(MVP-10): only two event types; incentive answers arrive as the raw donor message
 export const relayEventTypes = ['donation.created', 'incentive.redeemed'] as const
 
 export type RelayEventType = (typeof relayEventTypes)[number]

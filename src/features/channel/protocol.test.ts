@@ -21,9 +21,9 @@ const event: RelayEvent = {
     donationId: 'D123',
     displayName: 'Ana',
     amount: 25,
-    message: 'Play Mercy!',
+    message: 'Option B, please!',
     incentiveId: 'I9',
-    incentiveDescription: 'Pick a hero',
+    incentiveDescription: 'Choose an option',
   },
 }
 
