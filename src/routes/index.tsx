@@ -1,5 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/')({
-  component: () => <h1>DonorDrive OBS Dashboard</h1>,
+  beforeLoad: () => {
+    throw redirect({ to: '/setup', replace: true })
+  },
 })
