@@ -20,7 +20,7 @@ const now = new Date('2026-11-07T18:00:00.000Z')
 
 const liveIncentive: Incentive = {
   id: 'I1',
-  description: 'Play a hero of your choice',
+  description: 'Choose the next challenge',
   amount: 25,
   isActive: true,
   isTest: false,
@@ -90,7 +90,7 @@ describe('withFallbackIncentives', () => {
     expect(incentives).toBe(FALLBACK_INCENTIVES)
     expect(incentives.map((incentive) => incentive.description)).toEqual([
       'Test incentive',
-      'Pick a hero',
+      'Test limited incentive',
     ])
     expect(incentives.every((incentive) => incentive.isTest)).toBe(true)
   })
@@ -103,12 +103,12 @@ describe('randomDonationInput', () => {
     expect(input.amount).toBe(5)
   })
 
-  test('redeems an incentive with at least its amount and a hero message', () => {
-    // name, amount, redeem roll (< 0.5), incentive pick, hero pick
+  test('redeems an incentive with at least its amount and a message', () => {
+    // name, amount, redeem roll (< 0.5), incentive pick, message pick
     const input = randomDonationInput([liveIncentive], sequence(0, 0, 0.1, 0, 0))
     expect(input.incentiveId).toBe('I1')
     expect(input.amount).toBe(25)
-    expect(input.message).toBe('Mercy')
+    expect(input.message).toBe('For the kids!')
   })
 })
 

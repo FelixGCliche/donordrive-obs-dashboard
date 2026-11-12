@@ -93,7 +93,7 @@ export const SandboxPanel = ({
         <Input
           id={`${id}-message`}
           value={message}
-          placeholder={selectedIncentive ? 'e.g. a hero name' : 'Optional'}
+          placeholder="Optional"
           maxLength={280}
           disabled={disabled}
           onChange={(event) => setMessage(event.target.value)}

@@ -70,9 +70,10 @@ export const FALLBACK_INCENTIVES: Incentive[] = [
     isTest: true,
   },
   {
-    id: testId('pick-a-hero'),
-    description: 'Pick a hero',
+    id: testId('limited-incentive'),
+    description: 'Test limited incentive',
     amount: 10,
+    quantity: 3,
     isActive: true,
     isTest: true,
   },
@@ -115,18 +116,14 @@ export const parseAmountField = (text: string): AmountFieldResult => {
   return Number.isFinite(amount) && amount >= 0 ? { ok: true, amount } : { ok: false }
 }
 
-const randomNames = ['Ana', 'Brigitte', 'Cassidy', 'Jamison', 'Lena', 'Mei', 'Reinhardt', 'Zarya']
+const randomNames = ['Alex', 'Ben', 'Chloe', 'Dev', 'Eli', 'Fatima', 'Gus', 'Iris']
 const randomMessages = ['For the kids!', 'Good luck on stream', 'Keep it up!', 'GG']
-const randomHeroes = ['Mercy', 'Genji', 'Lúcio', 'Soldier: 76', 'Kiriko', 'Reaper']
 const randomAmounts = [5, 10, 15, 20, 25, 50, 100]
 
 const pick = <T>(items: readonly T[], random: () => number): T =>
   items[Math.floor(random() * items.length) % items.length]
 
-/**
- * Random donation input; redeems one of `incentives` half the time, with at least its amount.
- * A "hero" incentive gets a hero name as the message, like a real redemption would.
- */
+/** Random donation input; redeems one of `incentives` half the time, with at least its amount. */
 export const randomDonationInput = (
   incentives: Incentive[],
   random: () => number = Math.random
@@ -137,11 +134,10 @@ export const randomDonationInput = (
   if (!incentive) {
     return { displayName, amount, message: pick(randomMessages, random) }
   }
-  const isHero = /hero/i.test(incentive.description)
   return {
     displayName,
     amount: Math.max(amount, incentive.amount),
-    message: isHero ? pick(randomHeroes, random) : pick(randomMessages, random),
+    message: pick(randomMessages, random),
     incentiveId: incentive.id,
   }
 }
