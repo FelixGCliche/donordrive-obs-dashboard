@@ -77,8 +77,8 @@ describe('selectDashboard', () => {
     })
     expect(model.unreadCount).toBe(3)
     expect(model.activity.find((item) => item.id === 'd-1')?.incentive).toEqual({
-      id: 'i-hero',
-      description: 'Pick my next hero',
+      id: 'i-choice',
+      description: 'Choose the next challenge',
       isFulfilled: true,
     })
   })
@@ -96,9 +96,9 @@ describe('selectDashboard', () => {
       marks: { isRead: () => true, isFulfilled: (id) => id === 'd-3' },
       now,
     })
-    const hero = model.incentives.find((item) => item.id === 'i-hero')
+    const choice = model.incentives.find((item) => item.id === 'i-choice')
     const song = model.incentives.find((item) => item.id === 'i-song')
-    expect(hero).toMatchObject({ claimed: 3, pending: 2 })
+    expect(choice).toMatchObject({ claimed: 3, pending: 2 })
     expect(song).toMatchObject({ claimed: 1, pending: 1, quantity: 5 })
     expect(model.pendingCount).toBe(3)
   })
@@ -118,7 +118,7 @@ describe('selectDashboard', () => {
     const model = selectDashboard({ snapshot, now })
     const statuses = Object.fromEntries(model.incentives.map((item) => [item.id, item.status]))
     expect(statuses).toEqual({
-      'i-hero': 'active',
+      'i-choice': 'active',
       'i-song': 'active',
       'i-shave': 'sold_out',
       'i-late': 'upcoming',
@@ -133,7 +133,7 @@ describe('selectDashboard', () => {
       marks: { isRead: () => true, isFulfilled: (id) => id === 'test-1' },
       now,
     })
-    expect(newestPendingRedemption(model, 'i-hero')?.id).toBe('d-1')
+    expect(newestPendingRedemption(model, 'i-choice')?.id).toBe('d-1')
     expect(newestPendingRedemption(model, 'i-shave')).toBeUndefined()
   })
 })

@@ -25,9 +25,9 @@ export const createMockSnapshot = (now: Date = MOCK_NOW): Snapshot => ({
       id: 'd-1',
       displayName: 'Marie-Ève Tremblay',
       amount: 50,
-      message: 'Play Mercy next round please! Go go go 🎮',
+      message: 'Option B next round please! Go go go 🎮',
       createdAt: ago(now, 2),
-      incentiveId: 'i-hero',
+      incentiveId: 'i-choice',
       isTest: false,
     },
     {
@@ -44,7 +44,7 @@ export const createMockSnapshot = (now: Date = MOCK_NOW): Snapshot => ({
       message:
         'This is a really long message that should be clamped to two lines in the dock because nobody wants a wall of text pushing every other donation off screen during a stream.',
       createdAt: ago(now, 34),
-      incentiveId: 'i-hero',
+      incentiveId: 'i-choice',
       isTest: false,
     },
     {
@@ -66,8 +66,8 @@ export const createMockSnapshot = (now: Date = MOCK_NOW): Snapshot => ({
   ],
   incentives: [
     {
-      id: 'i-hero',
-      description: 'Pick my next hero',
+      id: 'i-choice',
+      description: 'Choose the next challenge',
       amount: 10,
       isActive: true,
       isTest: false,
@@ -118,9 +118,9 @@ export const createMockSandbox = (
       id: 'test-1',
       displayName: 'Test donor',
       amount: 20,
-      message: 'Testing the hero queue: Soldier 76',
+      message: 'Testing the incentive queue: option C',
       createdAt: ago(now, 0.5),
-      incentiveId: 'i-hero',
+      incentiveId: 'i-choice',
       isTest: true,
     },
   ],
