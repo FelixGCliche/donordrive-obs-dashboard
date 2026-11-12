@@ -70,7 +70,7 @@ export const rawDonationsFixture = [
     recipientName: 'Example Streamer',
     recipientImageURL:
       'https://donordrivecontent.com/extralife/images/$avatars$/constituent_default_100.jpg',
-    message: 'Placeholder hero request',
+    message: 'Placeholder incentive request',
     participantID: 500001,
     amount: 25,
     avatarImageURL:
@@ -123,7 +123,7 @@ export const rawIncentivesFixture = [
   {
     quantity: 5,
     amount: 25.0,
-    description: 'Pick my next hero',
+    description: 'Choose the next challenge',
     incentiveImageURL: null,
     quantityClaimed: 1,
     fulfillmentNote: null,

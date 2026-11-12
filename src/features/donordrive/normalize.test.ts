@@ -104,7 +104,7 @@ describe('parseSnapshot', () => {
     expect(incentives).toEqual([
       {
         id: '00000000-0000-0000-0000000000000001',
-        description: 'Pick my next hero',
+        description: 'Choose the next challenge',
         amount: 25,
         quantity: 5,
         quantityClaimed: 1,
