@@ -47,20 +47,20 @@ describe('buildDockUrl', () => {
 
 describe('buildChannelUrl', () => {
   test('uses wss for https origins', () => {
-    expect(buildChannelUrl('https://dock.example.com', KEY, '42')).toBe(
-      `wss://dock.example.com/api/channel/${KEY}?incentive=42`
+    expect(buildChannelUrl('https://dock.example.com', KEY)).toBe(
+      `wss://dock.example.com/api/channel/${KEY}`
     )
   })
 
   test('uses ws for http origins', () => {
-    expect(buildChannelUrl('http://localhost:3000', KEY, 'abc')).toBe(
-      `ws://localhost:3000/api/channel/${KEY}?incentive=abc`
+    expect(buildChannelUrl('http://localhost:3000', KEY)).toBe(
+      `ws://localhost:3000/api/channel/${KEY}`
     )
   })
 
-  test('omits the incentive when none is chosen', () => {
-    expect(buildChannelUrl('https://dock.example.com', KEY)).toBe(
-      `wss://dock.example.com/api/channel/${KEY}`
-    )
+  test('has no query string and ignores the origin path', () => {
+    const url = new URL(buildChannelUrl('https://dock.example.com/setup?x=1', KEY))
+    expect(url.search).toBe('')
+    expect(url.pathname).toBe(`/api/channel/${KEY}`)
   })
 })

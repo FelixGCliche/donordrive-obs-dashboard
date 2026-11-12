@@ -6,15 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@comp
 import { buildChannelUrl, buildDockUrl } from './buildDockUrl'
 import { useDockKey } from './dockKey'
 import { DockKeyCard, maskKey } from './DockKeyCard'
-import { HeroIncentiveSelect } from './HeroIncentiveSelect'
-import { SetupForm, isValidPid, type SetupFormValues } from './SetupForm'
+import { SetupForm, isValidPid } from './SetupForm'
 import { UrlOutput } from './UrlOutput'
 import { useSetupConfig } from './useSetupConfig'
 
 // Shown during SSR, before the browser's origin is known
 const PLACEHOLDER_ORIGIN = 'https://your-dashboard.example'
 
-/** Setup page: dock settings, dock key and the URLs to paste into OBS and OverwatchRoulette. */
+/** Setup page: dock settings, dock key, the OBS dock URL and the connection URL for third-party apps. */
 export const SetupPage = () => {
   const hydrated = useHydrated()
   const origin = hydrated ? window.location.origin : PLACEHOLDER_ORIGIN
@@ -23,16 +22,6 @@ export const SetupPage = () => {
   const [revealed, setRevealed] = useState(false)
 
   const pid = isValidPid(config.pid) ? config.pid : undefined
-
-  const onFormChange = (values: SetupFormValues) =>
-    setConfig((previous) => ({
-      ...values,
-      // Incentive ids belong to one participant on one site
-      incentiveId:
-        values.pid === previous.pid && values.host === previous.host
-          ? previous.incentiveId
-          : undefined,
-    }))
 
   const mask = (url: string) => (key && !revealed ? url.replaceAll(key, maskKey(key)) : url)
 
@@ -44,14 +33,15 @@ export const SetupPage = () => {
     density: config.density,
     key: key ?? undefined,
   })
-  const channelUrl = buildChannelUrl(origin, key ?? '…', config.incentiveId)
+  const channelUrl = buildChannelUrl(origin, key ?? '…')
 
   return (
     <main className="mx-auto grid max-w-[720px] gap-6 px-4 py-10">
       <header className="grid gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">DonorDrive OBS dock setup</h1>
         <p className="text-muted-foreground">
-          Pick your settings, then paste the URLs below into OBS and OverwatchRoulette.
+          Pick your settings, then paste the dock URL into OBS. Third-party apps can use the
+          connection URL.
         </p>
       </header>
 
@@ -61,13 +51,7 @@ export const SetupPage = () => {
           <CardDescription>Saved in this browser.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
-          <SetupForm values={config} onChange={onFormChange} />
-          <HeroIncentiveSelect
-            host={config.host}
-            pid={pid}
-            value={config.incentiveId}
-            onChange={(incentiveId) => setConfig((previous) => ({ ...previous, incentiveId }))}
-          />
+          <SetupForm values={config} onChange={setConfig} />
         </CardContent>
       </Card>
 
@@ -98,14 +82,15 @@ export const SetupPage = () => {
             }
           />
           <UrlOutput
-            label="OverwatchRoulette connection URL"
+            label="Connection URL for third-party apps"
             value={channelUrl}
             displayValue={mask(channelUrl)}
             disabled={!key}
             description={
-              config.incentiveId
-                ? "For the hero queue: paste this URL into OverwatchRoulette's dashboard connection settings."
-                : 'Pick a hero request incentive above so OverwatchRoulette knows which redemptions are hero requests.'
+              <>
+                Apps that react to donations and incentives subscribe to this WebSocket URL. See{' '}
+                <code>docs/channel-protocol.md</code> for the event format.
+              </>
             }
           />
         </CardContent>
@@ -126,8 +111,8 @@ export const SetupPage = () => {
               .
             </li>
             <li>
-              For the hero queue, paste the connection URL into OverwatchRoulette's dashboard. Keep
-              the dock open while streaming so new donations reach it.
+              Keep the dock open while streaming so new donations reach apps using the connection
+              URL.
             </li>
           </ol>
         </CardContent>

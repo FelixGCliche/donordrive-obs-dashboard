@@ -16,12 +16,11 @@ export const buildDockUrl = (origin: string, search: DockSearch): string => {
 }
 
 /**
- * Builds the channel WebSocket URL a consumer (OverwatchRoulette) connects to:
- * `wss://app/api/channel/<key>?incentive=<id>`, or `ws://` for an http origin.
+ * Builds the channel WebSocket URL a third-party app connects to:
+ * `wss://app/api/channel/<key>`, or `ws://` for an http origin (see docs/channel-protocol.md).
  */
-export const buildChannelUrl = (origin: string, key: string, incentiveId?: string): string => {
+export const buildChannelUrl = (origin: string, key: string): string => {
   const url = new URL(`/api/channel/${encodeURIComponent(key)}`, trimOrigin(origin))
   url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:'
-  if (incentiveId) url.searchParams.set('incentive', incentiveId)
   return url.toString()
 }
