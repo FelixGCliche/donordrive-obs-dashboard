@@ -1,5 +1,7 @@
 export * from './getSnapshot'
 export * from './hosts'
+export * from './ParticipantSnapshot'
 export * from './snapshotInterval'
 export * from './snapshotQuery'
+export type { SnapshotEnv } from './snapshotStub'
 export * from './types'

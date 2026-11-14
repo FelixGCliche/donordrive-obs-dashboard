@@ -35,7 +35,7 @@ src/
 - `features/`: business logic and complex components. Every domain gets its own flat kebab-case folder (no subfolders inside a feature):
   - components are PascalCase `.tsx` (`DonationItem.tsx`);
   - hooks are `useX.ts`;
-  - logic, schemas and constants are camelCase `.ts` (`fetchSnapshot.ts`, `protocol.ts`);
+  - logic, schemas and constants are camelCase `.ts` (`donorDriveFetch.ts`, `protocol.ts`);
   - tests sit next to the file they test as `<file>.test.ts`;
   - fixtures go in a flat `snapshotFixtures.ts`, not a `fixtures/` folder.
 - `hooks/`: shared, generic hooks (`useLocalStorage`, `useNow`). Flat, one file per hook, with a single `index.ts` barrel. Feature-specific hooks stay in their feature.

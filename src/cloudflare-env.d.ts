@@ -2,5 +2,6 @@
 // with the runtime) clash with the DOM lib this app type-checks against.
 declare module 'cloudflare:workers' {
   /** Bindings declared in wrangler.jsonc */
-  export const env: import('./features/channel').ChannelEnv
+  export const env: import('./features/channel').ChannelEnv &
+    import('./features/donordrive').SnapshotEnv
 }
