@@ -3,17 +3,26 @@
   "name": "donordrive-obs-dashboard",
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
-  // Custom TanStack Start server entry; it also exports the DockChannel Durable Object
+  // Custom TanStack Start server entry; it also exports the DockChannel and ParticipantSnapshot Durable Objects
   "main": "src/server.ts",
   "observability": { "enabled": true },
   "durable_objects": {
-    "bindings": [{ "name": "DOCK_CHANNEL", "class_name": "DockChannel" }],
+    "bindings": [
+      { "name": "DOCK_CHANNEL", "class_name": "DockChannel" },
+      { "name": "PARTICIPANT_SNAPSHOT", "class_name": "ParticipantSnapshot" },
+    ],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DockChannel"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["DockChannel"] },
+    { "tag": "v2", "new_sqlite_classes": ["ParticipantSnapshot"] },
+  ],
   // Settings used by `wrangler preview`; bindings are not inherited from the top level
   "previews": {
     "durable_objects": {
-      "bindings": [{ "name": "DOCK_CHANNEL", "class_name": "DockChannel" }],
+      "bindings": [
+        { "name": "DOCK_CHANNEL", "class_name": "DockChannel" },
+        { "name": "PARTICIPANT_SNAPSHOT", "class_name": "ParticipantSnapshot" },
+      ],
     },
   },
 }
