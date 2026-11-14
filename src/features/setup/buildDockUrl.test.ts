@@ -58,9 +58,21 @@ describe('buildChannelUrl', () => {
     )
   })
 
-  test('has no query string and ignores the origin path', () => {
+  test('has no query string without a participant and ignores the origin path', () => {
     const url = new URL(buildChannelUrl('https://dock.example.com/setup?x=1', KEY))
     expect(url.search).toBe('')
     expect(url.pathname).toBe(`/api/channel/${KEY}`)
+  })
+
+  test('appends host and pid when given', () => {
+    expect(
+      buildChannelUrl('https://dock.example.com', KEY, { host: 'extralife', pid: '12345' })
+    ).toBe(`wss://dock.example.com/api/channel/${KEY}?host=extralife&pid=12345`)
+  })
+
+  test('skips a missing pid', () => {
+    expect(buildChannelUrl('http://localhost:3000', KEY, { host: 'try' })).toBe(
+      `ws://localhost:3000/api/channel/${KEY}?host=try`
+    )
   })
 })

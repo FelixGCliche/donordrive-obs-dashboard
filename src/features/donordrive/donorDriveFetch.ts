@@ -33,6 +33,15 @@ export const parseRetryAfter = (value: string | null, now: number = Date.now()) 
   return Math.min(MAX_RETRY_AFTER_SEC, Math.max(1, Math.ceil(seconds)))
 }
 
+/** Rate limits win (they need the longest wait), then a missing participant, then the rest */
+export const pickError = (errors: SnapshotError[]): SnapshotError => {
+  const rateLimited = errors.filter((error) => error.kind === 'rate_limited')
+  if (rateLimited.length > 0) {
+    return rateLimited.reduce((a, b) => ((b.retryAfterSec ?? 0) > (a.retryAfterSec ?? 0) ? b : a))
+  }
+  return errors.find((error) => error.kind === 'not_found') ?? errors[0]
+}
+
 const upstreamError = (error: SnapshotError): UpstreamResult => ({ status: 'error', error })
 
 /**

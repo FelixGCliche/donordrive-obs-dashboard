@@ -2,6 +2,7 @@ import {
   etagsDiffer,
   fetchDonorDrive,
   NESTED_MAX_AGE_MS,
+  pickError,
   SNAPSHOT_DONATIONS_LIMIT,
   SNAPSHOT_FRESH_MS,
   SNAPSHOT_TIMEOUT_MS,
@@ -65,15 +66,6 @@ export const readFreshSnapshot = (
   // A rate limit whose window has passed is retried right away
   if (!result.ok && result.error.kind === 'rate_limited') return undefined
   return result
-}
-
-/** Rate limits win (they need the longest wait), then a missing participant, then the rest */
-const pickError = (errors: SnapshotError[]): SnapshotError => {
-  const rateLimited = errors.filter((error) => error.kind === 'rate_limited')
-  if (rateLimited.length > 0) {
-    return rateLimited.reduce((a, b) => ((b.retryAfterSec ?? 0) > (a.retryAfterSec ?? 0) ? b : a))
-  }
-  return errors.find((error) => error.kind === 'not_found') ?? errors[0]
 }
 
 const rateLimitedUntilFor = (error: SnapshotError, now: number) =>

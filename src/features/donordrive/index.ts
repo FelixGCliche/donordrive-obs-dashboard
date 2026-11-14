@@ -1,3 +1,4 @@
+export * from './fetchAllDonations'
 export * from './getSnapshot'
 export * from './hosts'
 export * from './ParticipantSnapshot'
