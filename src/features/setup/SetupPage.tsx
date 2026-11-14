@@ -34,7 +34,7 @@ export const SetupPage = () => {
     density: config.density,
     key: key ?? undefined,
   })
-  const channelUrl = buildChannelUrl(origin, key ?? '…')
+  const channelUrl = buildChannelUrl(origin, key ?? '…', { host: config.host, pid })
 
   return (
     <main className="mx-auto grid max-w-[720px] gap-6 px-4 py-10">

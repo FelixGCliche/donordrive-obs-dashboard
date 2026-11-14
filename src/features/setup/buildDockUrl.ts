@@ -1,4 +1,5 @@
 import type { DockSearch } from '@features/dock'
+import type { DonorDriveHost } from '@features/donordrive'
 
 const DOCK_SEARCH_ORDER = ['pid', 'host', 'interval', 'theme', 'density', 'key'] as const
 
@@ -15,12 +16,25 @@ export const buildDockUrl = (origin: string, search: DockSearch): string => {
   return url.toString()
 }
 
+export type ChannelUrlParticipant = {
+  host?: DonorDriveHost
+  pid?: string
+}
+
 /**
  * Builds the channel WebSocket URL a third-party app connects to:
- * `wss://app/api/channel/<key>`, or `ws://` for an http origin (see docs/channel-protocol.md).
+ * `wss://app/api/channel/<key>?host=…&pid=…`, or `ws://` for an http origin
+ * (see docs/channel-protocol.md). `host` and `pid` are only added when set; the channel ignores
+ * them, but apps use them to call `/pending`.
  */
-export const buildChannelUrl = (origin: string, key: string): string => {
+export const buildChannelUrl = (
+  origin: string,
+  key: string,
+  participant: ChannelUrlParticipant = {}
+): string => {
   const url = new URL(`/api/channel/${encodeURIComponent(key)}`, trimOrigin(origin))
   url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:'
+  if (participant.host) url.searchParams.set('host', participant.host)
+  if (participant.pid) url.searchParams.set('pid', participant.pid)
   return url.toString()
 }
