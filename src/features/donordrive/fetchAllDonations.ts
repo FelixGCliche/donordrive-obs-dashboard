@@ -67,9 +67,12 @@ const fetchDonationPages = async (
 ): Promise<PagesResult> => {
   const byId = new Map<string, RawDonation>()
   for (let page = 0; page < ALL_DONATIONS_MAX_PAGES; page++) {
+    // The default API version (1.0) has a 1-based offset and rejects `offset=0` with a 400; 1.1+
+    // is 0-based. Omitting it on the first page and using multiples of the page size after works
+    // for both: a 1-based page repeats the previous page's last donation, which the dedupe drops.
     const url = buildParticipantUrl(input.host, input.pid, 'donations', {
       limit: ALL_DONATIONS_PAGE_SIZE,
-      offset: page * ALL_DONATIONS_PAGE_SIZE,
+      ...(page === 0 ? {} : { offset: page * ALL_DONATIONS_PAGE_SIZE }),
     })
     const response = await get(url, deps)
     const error = errorOf(response)

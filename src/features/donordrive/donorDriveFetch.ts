@@ -71,6 +71,8 @@ export const fetchDonorDrive = async (
   }
 
   if (response.status === 304) return { status: 'not_modified' }
+  // Array endpoints answer 204 with no body when the result set (or the offset) is empty
+  if (response.status === 204) return { status: 'ok', data: [] }
   if (response.status === 404) {
     return upstreamError({ kind: 'not_found', message: 'Participant not found' })
   }
