@@ -79,6 +79,11 @@ describe('fetchDonorDrive', () => {
     })
   })
 
+  test('maps 204 (empty result or offset out of range) to an empty array', async () => {
+    const { deps } = makeDeps(() => new Response(null, { status: 204 }))
+    expect(await fetchDonorDrive(URL_, deps)).toEqual({ status: 'ok', data: [] })
+  })
+
   test('maps 404 to not_found', async () => {
     const { deps } = makeDeps(() => new Response('nope', { status: 404 }))
     expect(await fetchDonorDrive(URL_, deps)).toEqual({
