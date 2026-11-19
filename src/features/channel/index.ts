@@ -1,4 +1,8 @@
+export type { CreatedChannel } from './channelAdmin'
+export * from './channelAuth'
 export * from './channelClient'
+export type { RateLimiter } from './channelRateLimit'
+export * from './credentialsApi'
 export * from './DockChannel'
 export * from './handleChannelRequest'
 export * from './protocol'

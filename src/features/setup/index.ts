@@ -1,5 +1,6 @@
-export * from './dockKey'
+export * from './channelCredentials'
 export * from './buildDockUrl'
+export * from './ChannelAccessCard'
 export * from './SetupForm'
 export * from './IncentiveList'
 export * from './SetupPage'

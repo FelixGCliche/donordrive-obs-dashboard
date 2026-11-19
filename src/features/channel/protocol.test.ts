@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test'
 
 import type { RelayEvent, ServerFrame } from './protocol'
 import {
-  DOCK_KEY_PATTERN,
   eventId,
   marksOpSchema,
   marksSchema,
@@ -30,19 +29,6 @@ const event: RelayEvent = {
 describe('eventId', () => {
   test('joins type and donation id', () => {
     expect(eventId('donation.created', 'D123')).toBe('donation.created:D123')
-  })
-})
-
-describe('DOCK_KEY_PATTERN', () => {
-  test('accepts 22 to 64 url-safe characters', () => {
-    expect(DOCK_KEY_PATTERN.test('a'.repeat(22))).toBe(true)
-    expect(DOCK_KEY_PATTERN.test('A-b_'.repeat(16))).toBe(true)
-  })
-
-  test('rejects short, long or unsafe keys', () => {
-    expect(DOCK_KEY_PATTERN.test('a'.repeat(21))).toBe(false)
-    expect(DOCK_KEY_PATTERN.test('a'.repeat(65))).toBe(false)
-    expect(DOCK_KEY_PATTERN.test(`${'a'.repeat(22)}/`)).toBe(false)
   })
 })
 
@@ -92,7 +78,8 @@ describe('serverFrameSchema', () => {
     const marks = { version: 3, read: ['D1'], fulfilled: [], baselined: true }
     expect(marksSchema.parse(marks)).toEqual(marks)
     const frames: ServerFrame[] = [
-      { kind: 'hello', key: 'a'.repeat(22) },
+      { kind: 'hello', role: 'owner' },
+      { kind: 'hello', role: 'subscriber' },
       { kind: 'replay', events: [event] },
       { kind: 'event', event },
       { kind: 'marks', marks },
@@ -100,6 +87,11 @@ describe('serverFrameSchema', () => {
     for (const frame of frames) {
       expect(serverFrameSchema.parse(frame)).toEqual(frame)
     }
+  })
+
+  test('rejects a hello frame with an unknown role', () => {
+    expect(serverFrameSchema.safeParse({ kind: 'hello', role: 'admin' }).success).toBe(false)
+    expect(serverFrameSchema.safeParse({ kind: 'hello' }).success).toBe(false)
   })
 
   test('rejects an unknown frame kind', () => {

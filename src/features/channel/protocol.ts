@@ -1,7 +1,6 @@
 import { z } from 'zod'
 
-/** Dock key format: the dock's password, also the Durable Object name. */
-export const DOCK_KEY_PATTERN = /^[A-Za-z0-9_-]{22,64}$/
+import { channelRoles } from './channelAuth'
 
 export const RELAY_PROTOCOL_VERSION = 1
 
@@ -70,7 +69,7 @@ export type MarksOpKind = MarksOp['op']
 
 /** Frames the channel sends to a connected socket. */
 export const serverFrameSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('hello'), key: z.string() }),
+  z.object({ kind: z.literal('hello'), role: z.enum(channelRoles) }),
   z.object({ kind: z.literal('replay'), events: z.array(relayEventSchema) }),
   z.object({ kind: z.literal('event'), event: relayEventSchema }),
   /** Full marks state, sent after every change */

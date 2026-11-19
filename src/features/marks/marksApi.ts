@@ -2,12 +2,23 @@ import { createServerFn } from '@tanstack/react-start'
 import { env } from 'cloudflare:workers'
 import { z } from 'zod'
 
-import { callChannel, DOCK_KEY_PATTERN, marksOpSchema, marksSchema } from '@features/channel'
+import {
+  callChannel,
+  CHANNEL_ID_PATTERN,
+  CREDENTIAL_PATTERN,
+  marksOpSchema,
+  marksSchema,
+} from '@features/channel'
 import type { ChannelEnv, Marks } from '@features/channel'
 
-const keyInputSchema = z.object({ key: z.string().regex(DOCK_KEY_PATTERN) })
+import { marksErrorMessage } from './marksErrors'
 
-const updateInputSchema = keyInputSchema.extend({ op: marksOpSchema })
+const authInputSchema = z.object({
+  channelId: z.string().regex(CHANNEL_ID_PATTERN),
+  credential: z.string().regex(CREDENTIAL_PATTERN),
+})
+
+const updateInputSchema = authInputSchema.extend({ op: marksOpSchema })
 
 /**
  * The single place marks code touches the Worker env.
@@ -17,28 +28,28 @@ const updateInputSchema = keyInputSchema.extend({ op: marksOpSchema })
 const getChannelEnv = (): ChannelEnv => env as ChannelEnv
 
 const readMarks = async (response: Response): Promise<Marks> => {
-  if (!response.ok) {
-    throw new Error(`Marks request failed (${response.status})`)
-  }
+  if (!response.ok) throw new Error(marksErrorMessage(response.status))
   return marksSchema.parse(await response.json())
 }
 
-/** Reads the full marks state of a dock key. */
-export const getMarks = createServerFn({ method: 'GET' })
-  .validator(keyInputSchema)
+/** Reads the full marks state of a channel. POST keeps the credential out of the request URL. */
+export const getMarks = createServerFn({ method: 'POST' })
+  .validator(authInputSchema)
   .handler(async ({ data }): Promise<Marks> => {
-    const response = await callChannel(getChannelEnv(), data.key, '/marks')
+    const { channelId, credential } = data
+    const response = await callChannel(getChannelEnv(), { channelId, credential }, '/marks')
     return readMarks(response)
   })
 
-/** Applies one marks op to a dock key and returns the new full state. */
+/** Applies one marks op to a channel (owner key only) and returns the new full state. */
 export const updateMarks = createServerFn({ method: 'POST' })
   .validator(updateInputSchema)
   .handler(async ({ data }): Promise<Marks> => {
-    const response = await callChannel(getChannelEnv(), data.key, '/marks', {
+    const { channelId, credential, op } = data
+    const response = await callChannel(getChannelEnv(), { channelId, credential }, '/marks', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data.op),
+      body: JSON.stringify(op),
     })
     return readMarks(response)
   })

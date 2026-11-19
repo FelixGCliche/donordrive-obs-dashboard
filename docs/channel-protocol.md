@@ -2,29 +2,47 @@
 
 Third-party apps (overlays, bots, games) can subscribe to a dock's donation events over a WebSocket. The app only listens; it never needs to send anything. The schemas live in `src/features/channel/protocol.ts`.
 
+## Credentials
+
+A channel has a public **channel ID** (22 characters, not secret) and two credentials. Both are shown on the setup page and are stored hashed on the server.
+
+| Credential      | Format       | Role         | Use                                                        |
+| --------------- | ------------ | ------------ | ---------------------------------------------------------- |
+| Owner key       | `own_…` (47) | `owner`      | The dock itself. Can read, publish events and write marks. |
+| Subscribe token | `sub_…` (47) | `subscriber` | Third-party apps. Read-only.                               |
+
+Either can be rotated from the setup page (owner only). Rotating invalidates the old value immediately; there is no grace period.
+
+> **The owner key is a secret.** Anyone with it can publish fake events and rewrite the dock's marks. Never share it or show it on stream. Give third-party apps the subscribe token. If one leaks, rotate it.
+
 ## Connecting
 
 ```
-wss://<origin>/api/channel/<key>?host=<host>&pid=<pid>
+wss://<origin>/api/channel/<channelId>?token=<sub_…>&host=<host>&pid=<pid>
 ```
 
-- `<key>` is the dock key shown on the setup page. Use `ws://` for a local `http` origin.
+- `<channelId>` is the channel ID and `token` is the subscribe token (the owner key also works). Use `ws://` for a local `http` origin.
 - `host` (`extralife` or `try`) and `pid` (the DonorDrive participant ID) are added by the setup page when they are set. The WebSocket ignores them; apps pass them on to [`/pending`](#pending-redemptions).
-- To resume after a disconnect, add `?since=<eventId>` with the `id` of the last event you handled. The replay then holds only newer events.
+- To resume after a disconnect, add `&since=<eventId>` with the `id` of the last event you handled. The replay then holds only newer events.
 - Messages sent by the client are ignored.
+- A missing, invalid or rotated token is rejected with `401` before the socket opens.
 
-> **The key is a secret.** It is the only credential: anyone with the URL can read events, publish fake events and change the dock's marks. Share it only with apps you trust (see MVP-05 in `docs/mvp-shortcuts.md`).
+> **Tokens in the query string can appear in logs.** WebSocket clients can't set headers in browsers, so the token travels in the URL, and Workers logs may record it. Treat the subscribe token as low-risk and rotate it if it leaks. Use the owner key only over the `Authorization` header.
+
+### Rotation
+
+When a credential is rotated, every open socket of that role is closed with code `4401` and reason `credential_rotated`. Clients **must not** reconnect with the old token: it will get `401`. Fetch the new token (from the setup page) instead.
 
 ## Server → client frames
 
 Every message is a JSON object with a `kind`:
 
-| `kind`   | Payload                   | When                                                                                                                                         |
-| -------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hello`  | `key: string`             | First frame after connecting.                                                                                                                |
-| `replay` | `events: RelayEvent[]`    | Right after `hello`. The newest events (up to 50), oldest first; with `since`, only those after it (the whole window if `since` is unknown). |
-| `event`  | `event: RelayEvent`       | Each new event, live.                                                                                                                        |
-| `marks`  | `marks: { version, ... }` | Dock read/fulfilled state. Internal to the dock: **consumers should ignore it.**                                                             |
+| `kind`   | Payload                         | When                                                                                                                                         |
+| -------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hello`  | `role: 'owner' \| 'subscriber'` | First frame after connecting. Tells you which role your credential has. The credential is never echoed.                                      |
+| `replay` | `events: RelayEvent[]`          | Right after `hello`. The newest events (up to 50), oldest first; with `since`, only those after it (the whole window if `since` is unknown). |
+| `event`  | `event: RelayEvent`             | Each new event, live.                                                                                                                        |
+| `marks`  | `marks: { version, ... }`       | Dock read/fulfilled state. Internal to the dock: **consumers should ignore it.**                                                             |
 
 Ignore any `kind` you don't recognise.
 
@@ -60,12 +78,28 @@ A donation that redeems an incentive produces both a `donation.created` and an `
 
 ## HTTP endpoints
 
-Both endpoints live next to the WebSocket URL (`https://<origin>/api/channel/<key>/…`, or `http://` for a local origin) and allow cross-origin calls: responses carry `Access-Control-Allow-Origin: *`, and `OPTIONS` preflights get `204` with `Access-Control-Allow-Methods: GET, POST, OPTIONS` and `Access-Control-Allow-Headers: content-type`. The dock key in the path is the only credential, as for the WebSocket.
+Both endpoints live next to the WebSocket URL (`https://<origin>/api/channel/<channelId>/…`, or `http://` for a local origin) and allow cross-origin calls: responses carry `Access-Control-Allow-Origin: *`, and `OPTIONS` preflights get `204` with `Access-Control-Allow-Methods: GET, POST, OPTIONS` and `Access-Control-Allow-Headers: content-type, authorization`. Authenticate with `Authorization: Bearer <credential>` (or `?token=<credential>`). Errors carry the CORS headers too.
+
+| Endpoint       | Subscribe token | Owner key |
+| -------------- | --------------- | --------- |
+| WebSocket `/`  | yes             | yes       |
+| `GET /marks`   | yes             | yes       |
+| `GET /pending` | yes             | yes       |
+| `POST /marks`  | `403`           | yes       |
+| `POST /events` | `403`           | yes       |
+
+Common errors:
+
+- `400` bad channel ID.
+- `401` missing, invalid or rotated credential, with `WWW-Authenticate: Bearer`. An unknown channel also returns `401`.
+- `403` the credential is valid but its role can't do this (a subscribe token on a write).
+- `404` unknown path, `405` wrong method.
+- `429` per-credential rate limit (120 requests per 60 s), with `Retry-After` (seconds).
 
 ### Pending redemptions
 
 ```
-GET /api/channel/<key>/pending?host=<host>&pid=<pid>[&incentiveId=<id>…]
+GET /api/channel/<channelId>/pending?host=<host>&pid=<pid>[&incentiveId=<id>…]
 ```
 
 Returns every `incentive.redeemed` event whose donation the dock hasn't marked fulfilled, read straight from DonorDrive (not from the replay window), oldest first:
@@ -76,7 +110,7 @@ Returns every `incentive.redeemed` event whose donation the dock hasn't marked f
 
 - `host` and `pid` are required. `incentiveId` is optional and repeatable (at most 10); with it, only redemptions of those incentives are returned.
 - Only the newest 2000 donations are scanned (see MVP-15 in `docs/mvp-shortcuts.md`). Results are cached for 15 s per participant.
-- Errors: `400` for a bad key, `host`, `pid` or `incentiveId`; `404` when DonorDrive doesn't know the participant; `429` with `Retry-After` (seconds) when DonorDrive rate limits; `502` for other DonorDrive or channel failures. DonorDrive errors have a `{ error, message }` JSON body.
+- Errors: `400` for a bad channel ID, `host`, `pid` or `incentiveId`; `404` when DonorDrive doesn't know the participant; `429` with `Retry-After` (seconds) when DonorDrive rate limits; `502` for other DonorDrive or channel failures. DonorDrive errors have a `{ error, message }` JSON body.
 - Events are deduped by `id`, the same as on the WebSocket, so an app can merge them with live events safely.
 
 ### Marking redemptions fulfilled
@@ -84,10 +118,13 @@ Returns every `incentive.redeemed` event whose donation the dock hasn't marked f
 When an app has handled a redemption, it can mark it fulfilled so it no longer counts as pending in the dock and no longer comes back from `/pending`:
 
 ```
-POST /api/channel/<key>/marks
+POST /api/channel/<channelId>/marks
+Authorization: Bearer <own_…>
 Content-Type: application/json
 
 { "op": "fulfill", "ids": ["<donationId>", …] }
 ```
 
 `ids` are donation IDs (`data.donationId`, or the part of the event `id` after `incentive.redeemed:`). The response is the dock's full marks state. `{ "op": "unfulfill", … }` undoes it. Every connected dock updates live.
+
+**Marking requires the owner key.** A subscribe token gets `403`, so an app that marks redemptions fulfilled needs the owner key; keep it server-side and out of anything shared.
