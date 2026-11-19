@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 
+import type { ChannelAuth } from './channelAuth'
 import {
   acquireChannel,
   readChannelStatus,
@@ -8,7 +9,13 @@ import {
 } from './channelSocket'
 import type { ServerFrame } from './protocol'
 
-export type ChannelStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed'
+export type ChannelStatus =
+  | 'idle'
+  | 'connecting'
+  | 'open'
+  | 'reconnecting'
+  | 'unauthorized'
+  | 'closed'
 
 export type ChannelFrameListener = (frame: ServerFrame) => void
 
@@ -19,28 +26,43 @@ export type UseChannelResult = {
 }
 
 export type UseChannelOptions = {
-  /** Dock key; no socket is opened while it is undefined */
-  key: string | undefined
+  /** Channel and credential; no socket is opened while it is undefined */
+  auth: ChannelAuth | undefined
 }
 
 const noop = () => {}
 
 /** Opens one WebSocket to the dock channel and exposes its status and frames. */
-export const useChannel = ({ key }: UseChannelOptions): UseChannelResult => {
-  const watchStatus = useCallback(
-    (listener: () => void) => (key ? watchChannelStatus(key, listener) : noop),
-    [key]
+export const useChannel = ({ auth }: UseChannelOptions): UseChannelResult => {
+  const channelId = auth?.channelId
+  const credential = auth?.credential
+  // Stable for equal values, so a caller may pass a fresh object every render
+  const stableAuth = useMemo<ChannelAuth | undefined>(
+    () => (channelId && credential ? { channelId, credential } : undefined),
+    [channelId, credential]
   )
-  const getStatus = useCallback((): ChannelStatus => (key ? readChannelStatus(key) : 'idle'), [key])
-  const getServerStatus = useCallback((): ChannelStatus => (key ? 'connecting' : 'idle'), [key])
+
+  const watchStatus = useCallback(
+    (listener: () => void) => (stableAuth ? watchChannelStatus(stableAuth, listener) : noop),
+    [stableAuth]
+  )
+  const getStatus = useCallback(
+    (): ChannelStatus => (stableAuth ? readChannelStatus(stableAuth) : 'idle'),
+    [stableAuth]
+  )
+  const getServerStatus = useCallback(
+    (): ChannelStatus => (stableAuth ? 'connecting' : 'idle'),
+    [stableAuth]
+  )
   const status = useSyncExternalStore(watchStatus, getStatus, getServerStatus)
 
   // The socket is opened in an effect only, so nothing touches `window` during render or SSR
-  useEffect(() => (key ? acquireChannel(key) : undefined), [key])
+  useEffect(() => (stableAuth ? acquireChannel(stableAuth) : undefined), [stableAuth])
 
   const subscribe = useCallback(
-    (listener: ChannelFrameListener) => (key ? subscribeChannel(key, listener) : noop),
-    [key]
+    (listener: ChannelFrameListener) =>
+      stableAuth ? subscribeChannel(stableAuth, listener) : noop,
+    [stableAuth]
   )
 
   return useMemo(() => ({ status, subscribe }), [status, subscribe])

@@ -4,8 +4,10 @@ import type { SnapshotError } from '@features/donordrive'
 export type DockAlert =
   /** The dock URL has no participant id */
   | { kind: 'missing_pid' }
-  /** The dock URL has no dock key, so marks can't be saved */
-  | { kind: 'missing_key' }
+  /** The dock URL has no channel or owner key (or uses the old format), so marks can't be saved */
+  | { kind: 'missing_channel' }
+  /** The owner key was rotated or is invalid; marks and events are refused */
+  | { kind: 'channel_unauthorized' }
   | { kind: 'not_found' }
   /** The channel socket dropped; marks stay readable but can't change */
   | { kind: 'channel_disconnected' }
@@ -36,4 +38,6 @@ export const snapshotErrorAlert = (error: SnapshotError, retryInSec?: number): D
 
 /** Alerts that make marks read-only. */
 export const isMarksBlockingAlert = (alert: DockAlert): boolean =>
-  alert.kind === 'missing_key' || alert.kind === 'channel_disconnected'
+  alert.kind === 'missing_channel' ||
+  alert.kind === 'channel_unauthorized' ||
+  alert.kind === 'channel_disconnected'

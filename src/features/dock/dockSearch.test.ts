@@ -4,7 +4,8 @@ import { defaultParseSearch } from '@tanstack/react-router'
 
 import { dockSearchSchema } from './dockSearch'
 
-const validKey = 'abcdefghijklmnopqrstuv'
+const validChannel = 'abcdefghijklmnopqrstuv'
+const validKey = `own_${'A-b_C'.repeat(8)}abc`
 
 describe('dockSearchSchema', () => {
   test('fills defaults for an empty search', () => {
@@ -14,6 +15,7 @@ describe('dockSearchSchema', () => {
       interval: 30,
       theme: 'dark',
       density: 'comfortable',
+      channel: undefined,
       key: undefined,
     })
   })
@@ -26,6 +28,7 @@ describe('dockSearchSchema', () => {
         interval: 60,
         theme: 'light',
         density: 'compact',
+        channel: validChannel,
         key: validKey,
       })
     ).toEqual({
@@ -34,6 +37,7 @@ describe('dockSearchSchema', () => {
       interval: 60,
       theme: 'light',
       density: 'compact',
+      channel: validChannel,
       key: validKey,
     })
   })
@@ -50,6 +54,7 @@ describe('dockSearchSchema', () => {
         interval: 5,
         theme: 'neon',
         density: 'huge',
+        channel: 'short',
         key: 'short',
       })
     ).toEqual({
@@ -58,6 +63,7 @@ describe('dockSearchSchema', () => {
       interval: 30,
       theme: 'dark',
       density: 'comfortable',
+      channel: undefined,
       key: undefined,
     })
   })
@@ -66,9 +72,23 @@ describe('dockSearchSchema', () => {
     expect(dockSearchSchema.parse({ pid: 'a'.repeat(65) }).pid).toBeUndefined()
   })
 
-  test('accepts keys with dashes and underscores', () => {
-    const key = 'A-b_C'.repeat(5)
-    expect(dockSearchSchema.parse({ key }).key).toBe(key)
+  test('accepts channel IDs and owner keys with dashes and underscores', () => {
+    const channel = 'A-b_C'.repeat(4) + 'xy'
+    const parsed = dockSearchSchema.parse({ channel, key: validKey })
+    expect(parsed.channel).toBe(channel)
+    expect(parsed.key).toBe(validKey)
+  })
+
+  test('drops an old-format dock key', () => {
+    expect(dockSearchSchema.parse({ key: 'abcdefghijklmnopqrstuv' }).key).toBeUndefined()
+  })
+
+  test('drops a subscribe token used as the dock key', () => {
+    expect(dockSearchSchema.parse({ key: `sub_${'a'.repeat(43)}` }).key).toBeUndefined()
+  })
+
+  test('rejects a channel ID of the wrong length', () => {
+    expect(dockSearchSchema.parse({ channel: `${validChannel}x` }).channel).toBeUndefined()
   })
 })
 

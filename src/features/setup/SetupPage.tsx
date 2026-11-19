@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@components'
 
 import { buildChannelUrl, buildDockUrl } from './buildDockUrl'
-import { useDockKey } from './dockKey'
-import { DockKeyCard, maskKey } from './DockKeyCard'
+import { ChannelAccessCard, type RevealedSecrets } from './ChannelAccessCard'
+import { maskSecrets, useChannelCredentials } from './channelCredentials'
 import { IncentiveList } from './IncentiveList'
 import { SetupForm, isValidPid } from './SetupForm'
 import { UrlOutput } from './UrlOutput'
@@ -14,17 +14,23 @@ import { useSetupConfig } from './useSetupConfig'
 // Shown during SSR, before the browser's origin is known
 const PLACEHOLDER_ORIGIN = 'https://your-dashboard.example'
 
-/** Setup page: dock settings, dock key, the OBS dock URL and the connection URL for third-party apps. */
+/** Setup page: dock settings, channel access, the OBS dock URL and the connection URL for third-party apps. */
 export const SetupPage = () => {
   const hydrated = useHydrated()
   const origin = hydrated ? window.location.origin : PLACEHOLDER_ORIGIN
-  const { key, regenerate } = useDockKey()
+  const { credentials, status, error, retry, rotate, startNewChannel } = useChannelCredentials()
   const [config, setConfig] = useSetupConfig()
-  const [revealed, setRevealed] = useState(false)
+  const [revealed, setRevealed] = useState<RevealedSecrets>({ owner: false, subscriber: false })
 
   const pid = isValidPid(config.pid) ? config.pid : undefined
 
-  const mask = (url: string) => (key && !revealed ? url.replaceAll(key, maskKey(key)) : url)
+  const hiddenSecrets = credentials
+    ? [
+        ...(revealed.owner ? [] : [credentials.ownerKey]),
+        ...(revealed.subscriber ? [] : [credentials.subscribeToken]),
+      ]
+    : []
+  const mask = (url: string) => maskSecrets(url, hiddenSecrets)
 
   const dockUrl = buildDockUrl(origin, {
     pid,
@@ -32,9 +38,15 @@ export const SetupPage = () => {
     interval: config.interval,
     theme: config.theme,
     density: config.density,
-    key: key ?? undefined,
+    channel: credentials?.channelId,
+    key: credentials?.ownerKey,
   })
-  const channelUrl = buildChannelUrl(origin, key ?? '…', { host: config.host, pid })
+  const channelUrl = buildChannelUrl(
+    origin,
+    credentials?.channelId ?? '…',
+    credentials?.subscribeToken ?? '…',
+    { host: config.host, pid }
+  )
 
   return (
     <main className="mx-auto grid max-w-[720px] gap-6 px-4 py-10">
@@ -69,18 +81,25 @@ export const SetupPage = () => {
         </CardContent>
       </Card>
 
-      <DockKeyCard
-        dockKey={key}
+      <ChannelAccessCard
+        credentials={credentials}
+        status={status}
+        error={error}
+        onRetry={retry}
         revealed={revealed}
-        onRevealedChange={setRevealed}
-        onRegenerate={regenerate}
+        onRevealedChange={(role, shown) =>
+          setRevealed((previous) => ({ ...previous, [role]: shown }))
+        }
+        onRotate={rotate}
+        onStartNewChannel={startNewChannel}
       />
 
       <Card>
         <CardHeader>
           <CardTitle>URLs</CardTitle>
           <CardDescription>
-            Both contain the dock key. Copy them off stream, and never show them on screen.
+            Both contain a secret from your channel. Copy them off stream, and never show them on
+            screen.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
@@ -88,21 +107,27 @@ export const SetupPage = () => {
             label="Dock URL"
             value={dockUrl}
             displayValue={mask(dockUrl)}
-            disabled={!pid || !key}
+            disabled={!pid || !credentials}
             description={
-              pid
-                ? 'In OBS: Docks → Custom Browser Docks, name the dock, paste this URL and click Apply.'
-                : 'Enter a valid participant ID to build the dock URL.'
+              pid ? (
+                <>
+                  Contains your owner key — never share it or show it on stream. In OBS: Docks →
+                  Custom Browser Docks, name the dock, paste this URL and click Apply.
+                </>
+              ) : (
+                'Enter a valid participant ID to build the dock URL.'
+              )
             }
           />
           <UrlOutput
             label="Connection URL for third-party apps"
             value={channelUrl}
             displayValue={mask(channelUrl)}
-            disabled={!key}
+            disabled={!credentials}
             description={
               <>
-                Apps that react to donations and incentives subscribe to this WebSocket URL. See{' '}
+                Contains a read-only subscribe token; rotate it to cut off an app. Apps that react
+                to donations and incentives subscribe to this WebSocket URL. See{' '}
                 <code>docs/channel-protocol.md</code> for the event format.
               </>
             }
