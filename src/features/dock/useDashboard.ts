@@ -1,7 +1,7 @@
 import { createElement, useCallback, useMemo, useState } from 'react'
 import { z } from 'zod'
 
-import { useChannel, usePublishEvents } from '@features/channel'
+import { useChannel, usePublishSandboxEvents } from '@features/channel'
 import { getSnapshotRefetchInterval, useSnapshotQuery } from '@features/donordrive'
 import type { DonorDriveHost, SnapshotError } from '@features/donordrive'
 import { useMarks } from '@features/marks'
@@ -33,7 +33,7 @@ const byNewest = (a: { createdAt: string }, b: { createdAt: string }) =>
 
 /**
  * Wires the dock: polls the snapshot, syncs marks over one channel socket, merges the sandbox
- * and publishes new donations as relay events. Returns everything `<Dock>` renders.
+ * and publishes new sandbox test donations as relay events. Returns everything `<Dock>` renders.
  */
 export const useDashboard = ({
   pid,
@@ -57,7 +57,7 @@ export const useDashboard = ({
   const snapshot = data?.snapshot
 
   const sandbox = useSandbox({ host, pid })
-  const channel = useChannel({ key })
+  const channel = useChannel({ key, participant: pid ? { host, pid } : undefined })
 
   // Until the first snapshot, no ids: a baseline must cover the real donations, not only test ones
   const donationIds = useMemo(
@@ -102,7 +102,7 @@ export const useDashboard = ({
     [snapshot, sandbox.donations, sandboxIncentives, hasMarks, isRead, isFulfilled, clockTick]
   )
 
-  usePublishEvents({ key, model })
+  usePublishSandboxEvents({ key, model })
 
   // The disconnected alert waits for a first successful connect
   const [connectedKey, setConnectedKey] = useState<string>()

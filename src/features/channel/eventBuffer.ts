@@ -24,3 +24,6 @@ export const selectReplay = (
   const index = window.findIndex((event) => event.id === since)
   return index === -1 ? window : window.slice(index + 1)
 }
+
+/** Polled donation ids remembered as seen; far larger than the snapshot's donation window. */
+export const SEEN_LIMIT = 1000
