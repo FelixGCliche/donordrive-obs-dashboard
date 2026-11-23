@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { ActivityItem, DashboardModel } from '@features/dock'
 
-import { activityItemEvents, newActivityEvents } from './activityEvents'
+import { activityItemEvents, newActivityEvents, newItemEvents } from './activityEvents'
 
 const item = (id: string, extra: Partial<ActivityItem> = {}): ActivityItem => ({
   id,
@@ -90,5 +90,43 @@ describe('newActivityEvents', () => {
       newIds: [],
       events: [],
     })
+  })
+})
+
+describe('newItemEvents', () => {
+  test('returns only unseen items, oldest first, for the given participant', () => {
+    const result = newItemEvents([item('D3'), item('D2'), item('D1')], 'P9', new Set(['D2']))
+    expect(result.newIds).toEqual(['D1', 'D3'])
+    expect(result.events.map((event) => event.id)).toEqual([
+      'donation.created:D1',
+      'donation.created:D3',
+    ])
+    expect(result.events.every((event) => event.participantId === 'P9')).toBe(true)
+  })
+
+  test('accepts plain event items with an incentive', () => {
+    const result = newItemEvents(
+      [
+        {
+          id: 'D1',
+          displayName: 'Ana',
+          amount: 5,
+          createdAt: '2026-11-07T18:00:00.000Z',
+          isTest: false,
+          incentive: { id: 'I1', description: 'Hydrate' },
+        },
+      ],
+      'P1',
+      new Set()
+    )
+    expect(result.events.map((event) => event.id)).toEqual([
+      'donation.created:D1',
+      'incentive.redeemed:D1',
+    ])
+  })
+
+  test('lists invalid items as new even when their events are dropped', () => {
+    const id = 'x'.repeat(200)
+    expect(newItemEvents([item(id)], 'P1', new Set())).toEqual({ newIds: [id], events: [] })
   })
 })

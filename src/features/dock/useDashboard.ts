@@ -1,7 +1,7 @@
 import { createElement, useCallback, useMemo, useState } from 'react'
 import { z } from 'zod'
 
-import { useChannel, usePublishEvents } from '@features/channel'
+import { useChannel, usePublishSandboxEvents } from '@features/channel'
 import type { ChannelAuth } from '@features/channel'
 import { getSnapshotRefetchInterval, useSnapshotQuery } from '@features/donordrive'
 import type { DonorDriveHost, SnapshotError } from '@features/donordrive'
@@ -27,14 +27,17 @@ export const pausedStorageKey = (host: DonorDriveHost, pid: string) =>
 const MODEL_CLOCK_MS = 15_000
 
 /** Error of a poll that threw instead of returning a result (our server unreachable). */
-const THROWN_ERROR: SnapshotError = { kind: 'upstream', message: 'Could not reach the server' }
+const THROWN_ERROR: SnapshotError = {
+  kind: 'upstream',
+  message: 'Could not reach the server',
+}
 
 const byNewest = (a: { createdAt: string }, b: { createdAt: string }) =>
   (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)
 
 /**
  * Wires the dock: polls the snapshot, syncs marks over one channel socket, merges the sandbox
- * and publishes new donations as relay events. Returns everything `<Dock>` renders.
+ * and publishes new sandbox test donations as relay events. Returns everything `<Dock>` renders.
  */
 export const useDashboard = ({
   pid,
@@ -63,7 +66,10 @@ export const useDashboard = ({
     () => (channelId && key ? { channelId, credential: key } : undefined),
     [channelId, key]
   )
-  const channel = useChannel({ auth })
+  const channel = useChannel({
+    auth,
+    participant: pid ? { host, pid } : undefined,
+  })
 
   // Until the first snapshot, no ids: a baseline must cover the real donations, not only test ones
   const donationIds = useMemo(
@@ -101,14 +107,17 @@ export const useDashboard = ({
       snapshot &&
       selectDashboard({
         snapshot,
-        sandbox: { donations: sandbox.donations, incentives: sandboxIncentives },
+        sandbox: {
+          donations: sandbox.donations,
+          incentives: sandboxIncentives,
+        },
         marks: hasMarks ? { isRead, isFulfilled } : undefined,
         now: clockTick * MODEL_CLOCK_MS,
       }),
     [snapshot, sandbox.donations, sandboxIncentives, hasMarks, isRead, isFulfilled, clockTick]
   )
 
-  usePublishEvents({ auth, model })
+  usePublishSandboxEvents({ auth, model })
 
   // The disconnected alert waits for a first successful connect
   const connectionId = auth && `${auth.channelId}:${auth.credential}`

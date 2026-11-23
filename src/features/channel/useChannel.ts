@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 
+import type { DonorDriveHost } from '@features/donordrive'
+
 import type { ChannelAuth } from './channelAuth'
 import {
   acquireChannel,
@@ -25,15 +27,20 @@ export type UseChannelResult = {
   subscribe: (listener: ChannelFrameListener) => () => void
 }
 
+/** Participant a dock registers on connect, so the server polls its donations. */
+export type ChannelParticipant = { host: DonorDriveHost; pid: string }
+
 export type UseChannelOptions = {
   /** Channel and credential; no socket is opened while it is undefined */
   auth: ChannelAuth | undefined
+  /** Set by the dock only; consumers never register a participant */
+  participant?: ChannelParticipant
 }
 
 const noop = () => {}
 
 /** Opens one WebSocket to the dock channel and exposes its status and frames. */
-export const useChannel = ({ auth }: UseChannelOptions): UseChannelResult => {
+export const useChannel = ({ auth, participant }: UseChannelOptions): UseChannelResult => {
   const channelId = auth?.channelId
   const credential = auth?.credential
   // Stable for equal values, so a caller may pass a fresh object every render
@@ -57,7 +64,14 @@ export const useChannel = ({ auth }: UseChannelOptions): UseChannelResult => {
   const status = useSyncExternalStore(watchStatus, getStatus, getServerStatus)
 
   // The socket is opened in an effect only, so nothing touches `window` during render or SSR
-  useEffect(() => (stableAuth ? acquireChannel(stableAuth) : undefined), [stableAuth])
+  // Keyed on host and pid, not the object, so a new object per render does not reconnect
+  const host = participant?.host
+  const pid = participant?.pid
+  useEffect(
+    () =>
+      stableAuth ? acquireChannel(stableAuth, host && pid ? { host, pid } : undefined) : undefined,
+    [stableAuth, host, pid]
+  )
 
   const subscribe = useCallback(
     (listener: ChannelFrameListener) =>

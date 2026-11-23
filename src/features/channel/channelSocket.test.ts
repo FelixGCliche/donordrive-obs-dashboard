@@ -47,7 +47,10 @@ describe('backoffDelay', () => {
 
 describe('parseFrame', () => {
   test('parses a valid frame', () => {
-    expect(parseFrame(JSON.stringify({ kind: 'event', event }))).toEqual({ kind: 'event', event })
+    expect(parseFrame(JSON.stringify({ kind: 'event', event }))).toEqual({
+      kind: 'event',
+      event,
+    })
   })
 
   test('parses a hello frame with its role', () => {
@@ -79,17 +82,42 @@ describe('lastEventIdOf', () => {
 
 describe('channelSocketUrl', () => {
   test('puts the channel ID in the path and the credential in the token query', () => {
-    expect(channelSocketUrl(auth, undefined, { protocol: 'https:', host: 'dock.example' })).toBe(
-      `wss://dock.example/api/channel/${auth.channelId}?token=${auth.credential}`
-    )
+    expect(
+      channelSocketUrl(auth, undefined, undefined, {
+        protocol: 'https:',
+        host: 'dock.example',
+      })
+    ).toBe(`wss://dock.example/api/channel/${auth.channelId}?token=${auth.credential}`)
   })
 
   test('adds since and uses ws on http', () => {
     expect(
-      channelSocketUrl(auth, 'donation.created:D1', { protocol: 'http:', host: 'localhost:3000' })
+      channelSocketUrl(auth, 'donation.created:D1', undefined, {
+        protocol: 'http:',
+        host: 'localhost:3000',
+      })
     ).toBe(
       `ws://localhost:3000/api/channel/${auth.channelId}?token=${auth.credential}&since=donation.created%3AD1`
     )
+  })
+
+  test('a participant adds host, pid and role=dock and keeps since', () => {
+    const url = new URL(
+      channelSocketUrl(
+        auth,
+        'donation.created:D1',
+        { host: 'try', pid: '12345' },
+        {
+          protocol: 'https:',
+          host: 'dock.example',
+        }
+      )
+    )
+    expect(url.searchParams.get('token')).toBe(auth.credential)
+    expect(url.searchParams.get('since')).toBe('donation.created:D1')
+    expect(url.searchParams.get('host')).toBe('try')
+    expect(url.searchParams.get('pid')).toBe('12345')
+    expect(url.searchParams.get('role')).toBe('dock')
   })
 })
 
@@ -156,7 +184,10 @@ describe('acquireChannel', () => {
   })
 
   afterEach(() => {
-    Object.assign(globalThis, { WebSocket: originalWebSocket, location: originalLocation })
+    Object.assign(globalThis, {
+      WebSocket: originalWebSocket,
+      location: originalLocation,
+    })
   })
 
   test('opens the socket with the token and goes open', () => {

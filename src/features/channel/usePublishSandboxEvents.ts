@@ -2,11 +2,11 @@ import { useEffect, useRef } from 'react'
 
 import type { DashboardModel } from '@features/dock'
 
-import { newActivityEvents } from './activityEvents'
+import { newItemEvents } from './activityEvents'
 import type { ChannelAuth } from './channelAuth'
 import type { RelayEvent } from './protocol'
 
-export type UsePublishEventsOptions = {
+export type UsePublishSandboxEventsOptions = {
   /** Channel and owner key; nothing is published while it is undefined */
   auth: ChannelAuth | undefined
   model: DashboardModel | undefined
@@ -29,25 +29,28 @@ const postEvent = async (auth: ChannelAuth, event: RelayEvent): Promise<void> =>
 }
 
 /**
- * Publishes `donation.created` (and `incentive.redeemed`) for every donation that appears
- * after the first model; donations present on load are never replayed.
+ * Publishes `donation.created` (and `incentive.redeemed`) for every sandbox test donation that
+ * appears after the first model; test donations present on load (kept in localStorage) are
+ * never replayed.
  */
-export const usePublishEvents = ({ auth, model }: UsePublishEventsOptions): void => {
+export const usePublishSandboxEvents = ({ auth, model }: UsePublishSandboxEventsOptions): void => {
   const seenRef = useRef<Set<string> | null>(null)
 
   useEffect(() => {
     if (!model) return
+    const items = model.activity.filter((item) => item.isTest)
     if (!seenRef.current) {
-      seenRef.current = new Set(model.activity.map((item) => item.id))
+      seenRef.current = new Set(items.map((item) => item.id))
       return
     }
 
     const seen = seenRef.current
-    const { newIds, events } = newActivityEvents(model, seen)
+    const { newIds, events } = newItemEvents(items, model.participant.id, seen)
     for (const id of newIds) seen.add(id)
     if (!auth) return
 
-    // MVP-SHORTCUT(MVP-04): whichever dock is open detects and publishes events; several docks rely on id dedupe
+    // Only sandbox test donations are published from the dock;
+    // real events come from the DockChannel poller
     for (const event of events) void postEvent(auth, event)
   }, [auth, model])
 }

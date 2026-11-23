@@ -1,9 +1,10 @@
 import type { ChannelAuth } from './channelAuth'
 import { CHANNEL_ID_PATTERN, CREDENTIAL_PATTERN } from './channelAuth'
 import { CREDENTIAL_ROTATED_CLOSE_CODE } from './channelPaths'
+import { DOCK_ROLE } from './pollerRegistration'
 import type { ServerFrame } from './protocol'
 import { serverFrameSchema } from './protocol'
-import type { ChannelFrameListener, ChannelStatus } from './useChannel'
+import type { ChannelFrameListener, ChannelParticipant, ChannelStatus } from './useChannel'
 
 const BACKOFF_BASE_MS = 1000
 const BACKOFF_CAP_MS = 30_000
@@ -32,15 +33,24 @@ export const lastEventIdOf = (frame: ServerFrame): string | undefined => {
   return undefined
 }
 
-/** Socket URL of a channel; the credential travels as `?token=` since browsers can't set headers. */
+/**
+ * Socket URL of a channel; the credential travels as `?token=` since browsers can't set headers.
+ * `participant` registers this socket as the dock that drives the server-side poller.
+ */
 export const channelSocketUrl = (
   auth: ChannelAuth,
   since: string | undefined,
+  participant?: ChannelParticipant,
   location: Pick<Location, 'protocol' | 'host'> = globalThis.location
 ): string => {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
   const query = new URLSearchParams({ token: auth.credential })
   if (since) query.set('since', since)
+  if (participant) {
+    query.set('host', participant.host)
+    query.set('pid', participant.pid)
+    query.set('role', DOCK_ROLE)
+  }
   return `${protocol}://${location.host}/api/channel/${encodeURIComponent(auth.channelId)}?${query}`
 }
 
@@ -61,6 +71,8 @@ type Connection = {
   refs: number
   attempt: number
   lastEventId?: string
+  /** Sent on every (re)connect so the server keeps polling this participant */
+  participant?: ChannelParticipant
   socket?: WebSocket
   timer?: ReturnType<typeof setTimeout>
   frameListeners: Set<ChannelFrameListener>
@@ -125,7 +137,9 @@ const open = (connection: Connection): void => {
   connection.timer = undefined
   if (connection.refs === 0) return
 
-  const socket = new WebSocket(channelSocketUrl(connection.auth, connection.lastEventId))
+  const socket = new WebSocket(
+    channelSocketUrl(connection.auth, connection.lastEventId, connection.participant)
+  )
   connection.socket = socket
 
   socket.addEventListener('open', () => {
@@ -155,8 +169,14 @@ const open = (connection: Connection): void => {
   })
 }
 
-/** Starts (or joins) the connection for `auth`; returns the release function. */
-export const acquireChannel = (auth: ChannelAuth): (() => void) => {
+/**
+ * Starts (or joins) the connection for `auth`; returns the release function. A `participant`
+ * replaces the shared connection's one and applies from its next (re)connect.
+ */
+export const acquireChannel = (
+  auth: ChannelAuth,
+  participant?: ChannelParticipant
+): (() => void) => {
   const connection = getConnection(auth)
   // The server rejects malformed channel IDs and credentials; retrying would never succeed
   if (!isValidChannelAuth(auth)) {
@@ -164,6 +184,7 @@ export const acquireChannel = (auth: ChannelAuth): (() => void) => {
     return () => dropIfUnused(connection)
   }
 
+  if (participant) connection.participant = participant
   connection.refs += 1
   if (
     connection.refs === 1 &&

@@ -55,13 +55,20 @@ export const redeemedEvent = (
 ): RelayEvent | undefined =>
   validEvent(buildEvent('incentive.redeemed', donation, participantId, incentive))
 
+/** A donation plus the incentive it redeemed, if any; `ActivityItem` satisfies it. */
+export type EventItem = EventDonation & { incentive?: EventIncentive }
+
 /** Relay events for one donation: `donation.created`, plus `incentive.redeemed` when it has one. */
-export const activityItemEvents = (item: ActivityItem, participantId: string): RelayEvent[] => {
+export const itemEvents = (item: EventItem, participantId: string): RelayEvent[] => {
   // Drop anything the channel would reject (e.g. oversized ids) instead of posting it
   const created = validEvent(buildEvent('donation.created', item, participantId, item.incentive))
   const redeemed = item.incentive ? redeemedEvent(item, item.incentive, participantId) : undefined
   return [created, redeemed].filter((event): event is RelayEvent => event !== undefined)
 }
+
+/** Relay events for one dashboard activity item. */
+export const activityItemEvents = (item: ActivityItem, participantId: string): RelayEvent[] =>
+  itemEvents(item, participantId)
 
 export type NewActivityEvents = {
   /** Activity ids not in `seen`, oldest first */
@@ -70,15 +77,22 @@ export type NewActivityEvents = {
   events: RelayEvent[]
 }
 
+/** Diffs items (newest first) against the ids already seen. */
+export const newItemEvents = (
+  items: readonly EventItem[],
+  participantId: string,
+  seen: ReadonlySet<string>
+): NewActivityEvents => {
+  // Items are newest first; publish oldest first so consumers queue in donation order
+  const fresh = items.filter((item) => !seen.has(item.id)).reverse()
+  return {
+    newIds: fresh.map((item) => item.id),
+    events: fresh.flatMap((item) => itemEvents(item, participantId)),
+  }
+}
+
 /** Diffs the model's activity against the ids already seen. */
 export const newActivityEvents = (
   model: DashboardModel,
   seen: ReadonlySet<string>
-): NewActivityEvents => {
-  // Activity is newest first; publish oldest first so consumers queue in donation order
-  const fresh = model.activity.filter((item) => !seen.has(item.id)).reverse()
-  return {
-    newIds: fresh.map((item) => item.id),
-    events: fresh.flatMap((item) => activityItemEvents(item, model.participant.id)),
-  }
-}
+): NewActivityEvents => newItemEvents(model.activity, model.participant.id, seen)

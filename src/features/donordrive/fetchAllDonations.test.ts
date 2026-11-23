@@ -71,8 +71,27 @@ describe('createAllDonationsFetcher', () => {
     expect(result.donations[0]?.id).toBe('D0')
     expect(result.incentives.map((incentive) => incentive.id)).toEqual(['I1'])
     const calls = donationCalls(fetch)
-    expect(calls.map((url) => url.searchParams.get('offset'))).toEqual(['0', '100', '200'])
+    // No offset on the first page: the default API version (1.0) rejects `offset=0`
+    expect(calls.map((url) => url.searchParams.get('offset'))).toEqual([null, '100', '200'])
     expect(calls.every((url) => url.searchParams.get('limit') === '100')).toBe(true)
+  })
+
+  test('treats 204 (no donations, no incentives or offset out of range) as empty', async () => {
+    const noContent = () => new Response(null, { status: 204 })
+    const { fetchAll, fetch } = makeFetcher({
+      donations: (offset) => (offset < 100 ? json(page(offset, 100)) : noContent()),
+      incentives: noContent,
+    })
+    const result = await fetchAll(INPUT)
+    if (!result.ok) throw new Error(`expected ok, got ${result.error.message}`)
+    expect(result.donations).toHaveLength(100)
+    expect(result.incentives).toEqual([])
+    expect(donationCalls(fetch)).toHaveLength(2)
+
+    const empty = makeFetcher({ donations: noContent })
+    const emptyResult = await empty.fetchAll(INPUT)
+    if (!emptyResult.ok) throw new Error(`expected ok, got ${emptyResult.error.message}`)
+    expect(emptyResult.donations).toEqual([])
   })
 
   test('stops at the page cap', async () => {
