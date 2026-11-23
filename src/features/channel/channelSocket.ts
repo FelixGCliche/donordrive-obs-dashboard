@@ -1,6 +1,7 @@
+import { DOCK_ROLE } from './pollerRegistration'
 import type { ServerFrame } from './protocol'
 import { DOCK_KEY_PATTERN, serverFrameSchema } from './protocol'
-import type { ChannelFrameListener, ChannelStatus } from './useChannel'
+import type { ChannelFrameListener, ChannelParticipant, ChannelStatus } from './useChannel'
 
 const BACKOFF_BASE_MS = 1000
 const BACKOFF_CAP_MS = 30_000
@@ -29,9 +30,21 @@ export const lastEventIdOf = (frame: ServerFrame): string | undefined => {
   return undefined
 }
 
-export const channelSocketUrl = (key: string, since: string | undefined): string => {
+/** Socket URL; `participant` registers this socket as the dock that drives the server-side poller. */
+export const channelSocketUrl = (
+  key: string,
+  since: string | undefined,
+  participant?: ChannelParticipant
+): string => {
   const protocol = globalThis.location.protocol === 'https:' ? 'wss' : 'ws'
-  const query = since ? `?since=${encodeURIComponent(since)}` : ''
+  const params = new URLSearchParams()
+  if (since) params.set('since', since)
+  if (participant) {
+    params.set('host', participant.host)
+    params.set('pid', participant.pid)
+    params.set('role', DOCK_ROLE)
+  }
+  const query = params.size > 0 ? `?${params.toString()}` : ''
   return `${protocol}://${globalThis.location.host}/api/channel/${encodeURIComponent(key)}${query}`
 }
 
@@ -41,6 +54,8 @@ type Connection = {
   refs: number
   attempt: number
   lastEventId?: string
+  /** Sent on every (re)connect so the server keeps polling this participant */
+  participant?: ChannelParticipant
   socket?: WebSocket
   timer?: ReturnType<typeof setTimeout>
   frameListeners: Set<ChannelFrameListener>
@@ -103,7 +118,9 @@ const open = (connection: Connection): void => {
   connection.timer = undefined
   if (connection.refs === 0) return
 
-  const socket = new WebSocket(channelSocketUrl(connection.key, connection.lastEventId))
+  const socket = new WebSocket(
+    channelSocketUrl(connection.key, connection.lastEventId, connection.participant)
+  )
   connection.socket = socket
 
   socket.addEventListener('open', () => {
@@ -127,8 +144,11 @@ const open = (connection: Connection): void => {
   })
 }
 
-/** Starts (or joins) the connection for `key`; returns the release function. */
-export const acquireChannel = (key: string): (() => void) => {
+/**
+ * Starts (or joins) the connection for `key`; returns the release function. A `participant`
+ * replaces the shared connection's one and applies from its next (re)connect.
+ */
+export const acquireChannel = (key: string, participant?: ChannelParticipant): (() => void) => {
   const connection = getConnection(key)
   // The server rejects malformed keys; retrying would never succeed
   if (!DOCK_KEY_PATTERN.test(key)) {
@@ -136,6 +156,7 @@ export const acquireChannel = (key: string): (() => void) => {
     return () => dropIfUnused(connection)
   }
 
+  if (participant) connection.participant = participant
   connection.refs += 1
   if (connection.refs === 1 && !connection.socket && !connection.timer) {
     setStatus(connection, connection.status === 'closed' ? 'connecting' : connection.status)

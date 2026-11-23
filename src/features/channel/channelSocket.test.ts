@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 
-import { backoffDelay, lastEventIdOf, parseFrame } from './channelSocket'
+import { backoffDelay, channelSocketUrl, lastEventIdOf, parseFrame } from './channelSocket'
 import type { RelayEvent } from './protocol'
 
 const event: RelayEvent = {
@@ -45,5 +45,45 @@ describe('lastEventIdOf', () => {
     expect(lastEventIdOf({ kind: 'replay', events: [event] })).toBe(event.id)
     expect(lastEventIdOf({ kind: 'replay', events: [] })).toBeUndefined()
     expect(lastEventIdOf({ kind: 'hello', key: 'k' })).toBeUndefined()
+  })
+})
+
+describe('channelSocketUrl', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'location')
+
+  beforeAll(() => {
+    Object.defineProperty(globalThis, 'location', {
+      configurable: true,
+      value: { protocol: 'https:', host: 'dock.example' },
+    })
+  })
+
+  afterAll(() => {
+    if (original) Object.defineProperty(globalThis, 'location', original)
+    else Reflect.deleteProperty(globalThis, 'location')
+  })
+
+  test('without a participant the url only carries since', () => {
+    expect(channelSocketUrl('k1', undefined)).toBe('wss://dock.example/api/channel/k1')
+    expect(channelSocketUrl('k1', 'donation.created:D1')).toBe(
+      'wss://dock.example/api/channel/k1?since=donation.created%3AD1'
+    )
+  })
+
+  test('a participant adds host, pid and role=dock and keeps since', () => {
+    const url = new URL(
+      channelSocketUrl('k1', 'donation.created:D1', { host: 'try', pid: '12345' })
+    )
+    expect(url.pathname).toBe('/api/channel/k1')
+    expect(url.searchParams.get('since')).toBe('donation.created:D1')
+    expect(url.searchParams.get('host')).toBe('try')
+    expect(url.searchParams.get('pid')).toBe('12345')
+    expect(url.searchParams.get('role')).toBe('dock')
+  })
+
+  test('a participant without since omits it', () => {
+    const url = new URL(channelSocketUrl('k1', undefined, { host: 'extralife', pid: '7' }))
+    expect(url.searchParams.has('since')).toBe(false)
+    expect(url.searchParams.get('role')).toBe('dock')
   })
 })
