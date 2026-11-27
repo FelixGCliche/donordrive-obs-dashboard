@@ -1,6 +1,9 @@
+import type { ChannelAuth } from './channelAuth'
+import { CHANNEL_ID_PATTERN, CREDENTIAL_PATTERN } from './channelAuth'
+import { CREDENTIAL_ROTATED_CLOSE_CODE } from './channelPaths'
 import { DOCK_ROLE } from './pollerRegistration'
 import type { ServerFrame } from './protocol'
-import { DOCK_KEY_PATTERN, serverFrameSchema } from './protocol'
+import { serverFrameSchema } from './protocol'
 import type { ChannelFrameListener, ChannelParticipant, ChannelStatus } from './useChannel'
 
 const BACKOFF_BASE_MS = 1000
@@ -30,26 +33,40 @@ export const lastEventIdOf = (frame: ServerFrame): string | undefined => {
   return undefined
 }
 
-/** Socket URL; `participant` registers this socket as the dock that drives the server-side poller. */
+/**
+ * Socket URL of a channel; the credential travels as `?token=` since browsers can't set headers.
+ * `participant` registers this socket as the dock that drives the server-side poller.
+ */
 export const channelSocketUrl = (
-  key: string,
+  auth: ChannelAuth,
   since: string | undefined,
-  participant?: ChannelParticipant
+  participant?: ChannelParticipant,
+  location: Pick<Location, 'protocol' | 'host'> = globalThis.location
 ): string => {
-  const protocol = globalThis.location.protocol === 'https:' ? 'wss' : 'ws'
-  const params = new URLSearchParams()
-  if (since) params.set('since', since)
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
+  const query = new URLSearchParams({ token: auth.credential })
+  if (since) query.set('since', since)
   if (participant) {
-    params.set('host', participant.host)
-    params.set('pid', participant.pid)
-    params.set('role', DOCK_ROLE)
+    query.set('host', participant.host)
+    query.set('pid', participant.pid)
+    query.set('role', DOCK_ROLE)
   }
-  const query = params.size > 0 ? `?${params.toString()}` : ''
-  return `${protocol}://${globalThis.location.host}/api/channel/${encodeURIComponent(key)}${query}`
+  return `${protocol}://${location.host}/api/channel/${encodeURIComponent(auth.channelId)}?${query}`
 }
+
+/** Identity of a connection: a channel and the credential it is opened with. */
+export const connectionKey = (auth: ChannelAuth): string => `${auth.channelId}:${auth.credential}`
+
+/** Whether the server could accept these; malformed ones would never succeed, so are not retried. */
+export const isValidChannelAuth = (auth: ChannelAuth): boolean =>
+  CHANNEL_ID_PATTERN.test(auth.channelId) && CREDENTIAL_PATTERN.test(auth.credential)
+
+/** A close that means the credential no longer works; reconnecting would never succeed. */
+export const isUnauthorizedClose = (code: number): boolean => code === CREDENTIAL_ROTATED_CLOSE_CODE
 
 type Connection = {
   key: string
+  auth: ChannelAuth
   status: ChannelStatus
   refs: number
   attempt: number
@@ -62,14 +79,16 @@ type Connection = {
   statusListeners: Set<() => void>
 }
 
-// One connection per dock key, shared by every useChannel caller in the page
+// One connection per channel and credential, shared by every useChannel caller in the page
 const connections = new Map<string, Connection>()
 
-const getConnection = (key: string): Connection => {
+const getConnection = (auth: ChannelAuth): Connection => {
+  const key = connectionKey(auth)
   let connection = connections.get(key)
   if (!connection) {
     connection = {
       key,
+      auth: { channelId: auth.channelId, credential: auth.credential },
       status: 'connecting',
       refs: 0,
       attempt: 0,
@@ -119,7 +138,7 @@ const open = (connection: Connection): void => {
   if (connection.refs === 0) return
 
   const socket = new WebSocket(
-    channelSocketUrl(connection.key, connection.lastEventId, connection.participant)
+    channelSocketUrl(connection.auth, connection.lastEventId, connection.participant)
   )
   connection.socket = socket
 
@@ -137,28 +156,42 @@ const open = (connection: Connection): void => {
     emit(connection, frame)
   })
 
-  socket.addEventListener('close', () => {
+  socket.addEventListener('close', (event) => {
     if (connection.socket !== socket) return
     connection.socket = undefined
+    // Browsers hide an HTTP 401 upgrade failure (it closes with 1006); only the rotation close code is
+    // detectable here. A 401 still surfaces through the marks request, which fails with 401 too.
+    if (isUnauthorizedClose(event.code)) {
+      setStatus(connection, 'unauthorized')
+      return
+    }
     if (connection.refs > 0) scheduleReconnect(connection)
   })
 }
 
 /**
- * Starts (or joins) the connection for `key`; returns the release function. A `participant`
+ * Starts (or joins) the connection for `auth`; returns the release function. A `participant`
  * replaces the shared connection's one and applies from its next (re)connect.
  */
-export const acquireChannel = (key: string, participant?: ChannelParticipant): (() => void) => {
-  const connection = getConnection(key)
-  // The server rejects malformed keys; retrying would never succeed
-  if (!DOCK_KEY_PATTERN.test(key)) {
-    setStatus(connection, 'closed')
+export const acquireChannel = (
+  auth: ChannelAuth,
+  participant?: ChannelParticipant
+): (() => void) => {
+  const connection = getConnection(auth)
+  // The server rejects malformed channel IDs and credentials; retrying would never succeed
+  if (!isValidChannelAuth(auth)) {
+    setStatus(connection, 'unauthorized')
     return () => dropIfUnused(connection)
   }
 
   if (participant) connection.participant = participant
   connection.refs += 1
-  if (connection.refs === 1 && !connection.socket && !connection.timer) {
+  if (
+    connection.refs === 1 &&
+    connection.status !== 'unauthorized' &&
+    !connection.socket &&
+    !connection.timer
+  ) {
     setStatus(connection, connection.status === 'closed' ? 'connecting' : connection.status)
     open(connection)
   }
@@ -176,16 +209,17 @@ export const acquireChannel = (key: string, participant?: ChannelParticipant): (
     connection.socket = undefined
     socket?.close(1000, 'released')
     connection.attempt = 0
-    setStatus(connection, 'closed')
+    // A rejected credential stays rejected while anything still watches this connection
+    if (connection.status !== 'unauthorized') setStatus(connection, 'closed')
     dropIfUnused(connection)
   }
 }
 
-export const readChannelStatus = (key: string): ChannelStatus =>
-  connections.get(key)?.status ?? 'connecting'
+export const readChannelStatus = (auth: ChannelAuth): ChannelStatus =>
+  connections.get(connectionKey(auth))?.status ?? 'connecting'
 
-export const watchChannelStatus = (key: string, listener: () => void): (() => void) => {
-  const connection = getConnection(key)
+export const watchChannelStatus = (auth: ChannelAuth, listener: () => void): (() => void) => {
+  const connection = getConnection(auth)
   connection.statusListeners.add(listener)
   return () => {
     connection.statusListeners.delete(listener)
@@ -193,8 +227,11 @@ export const watchChannelStatus = (key: string, listener: () => void): (() => vo
   }
 }
 
-export const subscribeChannel = (key: string, listener: ChannelFrameListener): (() => void) => {
-  const connection = getConnection(key)
+export const subscribeChannel = (
+  auth: ChannelAuth,
+  listener: ChannelFrameListener
+): (() => void) => {
+  const connection = getConnection(auth)
   connection.frameListeners.add(listener)
   return () => {
     connection.frameListeners.delete(listener)

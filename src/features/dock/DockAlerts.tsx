@@ -1,4 +1,12 @@
-import { CircleAlert, KeyRound, SearchX, Unplug, Timer, TriangleAlert } from 'lucide-react'
+import {
+  CircleAlert,
+  KeyRound,
+  SearchX,
+  ShieldAlert,
+  Unplug,
+  Timer,
+  TriangleAlert,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { Alert, AlertDescription, AlertTitle, cn } from '@components'
@@ -38,14 +46,27 @@ const alertContent = (alert: DockAlert): AlertContent => {
           </p>
         ),
       }
-    case 'missing_key':
+    case 'missing_channel':
       return {
         icon: <KeyRound />,
         tone: '[&>svg]:text-amber-500',
         title: 'Marks are off',
         description: (
           <p>
-            The dock URL has no dock key, so read and done marks can't be saved. <SetupLink />.
+            This dock URL is missing its channel or uses an old format. Copy the dock URL again from
+            setup. <SetupLink />.
+          </p>
+        ),
+      }
+    case 'channel_unauthorized':
+      return {
+        icon: <ShieldAlert />,
+        tone: '[&>svg]:text-red-500',
+        title: 'Owner key rejected',
+        description: (
+          <p>
+            Your owner key was rotated or is invalid. Copy the new dock URL from setup.{' '}
+            <SetupLink />.
           </p>
         ),
       }

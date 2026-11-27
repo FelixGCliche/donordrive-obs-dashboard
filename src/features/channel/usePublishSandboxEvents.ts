@@ -3,19 +3,23 @@ import { useEffect, useRef } from 'react'
 import type { DashboardModel } from '@features/dock'
 
 import { newItemEvents } from './activityEvents'
+import type { ChannelAuth } from './channelAuth'
 import type { RelayEvent } from './protocol'
 
 export type UsePublishSandboxEventsOptions = {
-  /** Dock key; nothing is published while it is undefined */
-  key: string | undefined
+  /** Channel and owner key; nothing is published while it is undefined */
+  auth: ChannelAuth | undefined
   model: DashboardModel | undefined
 }
 
-const postEvent = async (key: string, event: RelayEvent): Promise<void> => {
+const postEvent = async (auth: ChannelAuth, event: RelayEvent): Promise<void> => {
   try {
-    const response = await fetch(`/api/channel/${encodeURIComponent(key)}/events`, {
+    const response = await fetch(`/api/channel/${encodeURIComponent(auth.channelId)}/events`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${auth.credential}`,
+      },
       body: JSON.stringify(event),
     })
     if (!response.ok) console.warn('[channel] event rejected', event.id, response.status)
@@ -29,7 +33,7 @@ const postEvent = async (key: string, event: RelayEvent): Promise<void> => {
  * appears after the first model; test donations present on load (kept in localStorage) are
  * never replayed.
  */
-export const usePublishSandboxEvents = ({ key, model }: UsePublishSandboxEventsOptions): void => {
+export const usePublishSandboxEvents = ({ auth, model }: UsePublishSandboxEventsOptions): void => {
   const seenRef = useRef<Set<string> | null>(null)
 
   useEffect(() => {
@@ -43,10 +47,10 @@ export const usePublishSandboxEvents = ({ key, model }: UsePublishSandboxEventsO
     const seen = seenRef.current
     const { newIds, events } = newItemEvents(items, model.participant.id, seen)
     for (const id of newIds) seen.add(id)
-    if (!key) return
+    if (!auth) return
 
     // Only sandbox test donations are published from the dock;
     // real events come from the DockChannel poller
-    for (const event of events) void postEvent(key, event)
-  }, [key, model])
+    for (const event of events) void postEvent(auth, event)
+  }, [auth, model])
 }

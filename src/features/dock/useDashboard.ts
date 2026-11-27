@@ -2,6 +2,7 @@ import { createElement, useCallback, useMemo, useState } from 'react'
 import { z } from 'zod'
 
 import { useChannel, usePublishSandboxEvents } from '@features/channel'
+import type { ChannelAuth } from '@features/channel'
 import { getSnapshotRefetchInterval, useSnapshotQuery } from '@features/donordrive'
 import type { DonorDriveHost, SnapshotError } from '@features/donordrive'
 import { useMarks } from '@features/marks'
@@ -26,7 +27,10 @@ export const pausedStorageKey = (host: DonorDriveHost, pid: string) =>
 const MODEL_CLOCK_MS = 15_000
 
 /** Error of a poll that threw instead of returning a result (our server unreachable). */
-const THROWN_ERROR: SnapshotError = { kind: 'upstream', message: 'Could not reach the server' }
+const THROWN_ERROR: SnapshotError = {
+  kind: 'upstream',
+  message: 'Could not reach the server',
+}
 
 const byNewest = (a: { createdAt: string }, b: { createdAt: string }) =>
   (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)
@@ -41,6 +45,7 @@ export const useDashboard = ({
   interval,
   theme,
   density,
+  channel: channelId,
   key,
 }: DockSearch): DockProps => {
   const [paused, setPaused] = useLocalStorage(
@@ -57,7 +62,14 @@ export const useDashboard = ({
   const snapshot = data?.snapshot
 
   const sandbox = useSandbox({ host, pid })
-  const channel = useChannel({ key, participant: pid ? { host, pid } : undefined })
+  const auth = useMemo<ChannelAuth | undefined>(
+    () => (channelId && key ? { channelId, credential: key } : undefined),
+    [channelId, key]
+  )
+  const channel = useChannel({
+    auth,
+    participant: pid ? { host, pid } : undefined,
+  })
 
   // Until the first snapshot, no ids: a baseline must cover the real donations, not only test ones
   const donationIds = useMemo(
@@ -69,7 +81,7 @@ export const useDashboard = ({
         : [],
     [snapshot, sandbox.donations]
   )
-  const marks = useMarks({ key, donationIds, channel })
+  const marks = useMarks({ auth, donationIds, channel })
 
   const liveIncentives = snapshot?.incentives
   const panelIncentives = useMemo(
@@ -95,20 +107,25 @@ export const useDashboard = ({
       snapshot &&
       selectDashboard({
         snapshot,
-        sandbox: { donations: sandbox.donations, incentives: sandboxIncentives },
+        sandbox: {
+          donations: sandbox.donations,
+          incentives: sandboxIncentives,
+        },
         marks: hasMarks ? { isRead, isFulfilled } : undefined,
         now: clockTick * MODEL_CLOCK_MS,
       }),
     [snapshot, sandbox.donations, sandboxIncentives, hasMarks, isRead, isFulfilled, clockTick]
   )
 
-  usePublishSandboxEvents({ key, model })
+  usePublishSandboxEvents({ auth, model })
 
   // The disconnected alert waits for a first successful connect
-  const [connectedKey, setConnectedKey] = useState<string>()
+  const connectionId = auth && `${auth.channelId}:${auth.credential}`
+  const [connectedId, setConnectedId] = useState<string>()
   // Adjusting state during render (React's documented pattern) instead of in an effect
-  if (channel.status === 'open' && connectedKey !== key) setConnectedKey(key)
-  const hasConnected = key !== undefined && connectedKey === key
+  if (channel.status === 'open' && connectedId !== connectionId) setConnectedId(connectionId)
+  const hasConnected = connectionId !== undefined && connectedId === connectionId
+  const isUnauthorized = channel.status === 'unauthorized' || marks.isUnauthorized
 
   const thrown = query.status === 'error'
   const pollError: SnapshotError | undefined = thrown ? THROWN_ERROR : data?.error
@@ -137,13 +154,17 @@ export const useDashboard = ({
 
   const alerts: DockAlert[] = []
   if (!pid) alerts.push({ kind: 'missing_pid' })
-  else if (!key) alerts.push({ kind: 'missing_key' })
+  else if (!auth) alerts.push({ kind: 'missing_channel' })
   if (pid && pollError && (pollError.kind === 'not_found' || !paused)) {
     alerts.push(snapshotErrorAlert(pollError, retryInSec))
   }
-  if (key && hasConnected && channel.status !== 'open')
+  if (auth && isUnauthorized) alerts.push({ kind: 'channel_unauthorized' })
+  else if (auth && hasConnected && channel.status !== 'open')
     alerts.push({ kind: 'channel_disconnected' })
-  if (marks.error) alerts.push({ kind: 'marks_error', message: marks.error })
+  // The unauthorized alert already explains a rejected owner key
+  if (marks.error && !marks.isUnauthorized) {
+    alerts.push({ kind: 'marks_error', message: marks.error })
+  }
 
   const { refetch } = query
   const onRefresh = useCallback(() => {

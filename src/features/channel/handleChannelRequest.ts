@@ -1,10 +1,13 @@
 import type { AllDonationsFetcher, SnapshotError } from '@features/donordrive'
 import { DONORDRIVE_PID_PATTERN, fetchAllDonations, isDonorDriveHost } from '@features/donordrive'
 
+import { actionFor, CHANNEL_ID_PATTERN, readRequestCredential } from './channelAuth'
 import type { ChannelEnv } from './channelClient'
-import { fetchChannel, isChannelSubPath } from './channelStub'
+import { authorizeChannelCall } from './channelClient'
+import type { ForwardedAuth } from './channelStub'
+import { fetchChannel } from './channelStub'
 import { pendingRedemptionEvents } from './pendingEvents'
-import { DOCK_KEY_PATTERN, marksSchema, relayEventDataSchema } from './protocol'
+import { marksSchema, relayEventDataSchema } from './protocol'
 
 /** Worker-only sub-path: unfulfilled redemptions from DonorDrive (not served by the DO). */
 export const PENDING_SUB_PATH = '/pending'
@@ -18,16 +21,16 @@ const corsSubPaths: ReadonlySet<string> = new Set([PENDING_SUB_PATH, '/marks'])
 export const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'content-type',
+  'Access-Control-Allow-Headers': 'content-type, authorization',
 } as const
 
 export type ChannelRequestDeps = {
   fetchAllDonations?: AllDonationsFetcher
 }
 
-/** Sub-path after the key segment of `pathname`, e.g. `/api/channel/<key>/marks` → `/marks`. */
-export const channelSubPath = (pathname: string, key: string): string => {
-  const marker = `/${key}`
+/** Sub-path after the channel ID segment, e.g. `/api/channel/<id>/marks` → `/marks`. */
+export const channelSubPath = (pathname: string, channelId: string): string => {
+  const marker = `/${channelId}`
   const at = pathname.indexOf(marker)
   const rest = at === -1 ? '' : pathname.slice(at + marker.length)
   const trimmed = rest.replace(/\/+$/, '')
@@ -63,27 +66,37 @@ const upstreamFailure = (error: SnapshotError): Response => {
   )
 }
 
-const readFulfilled = async (env: ChannelEnv, key: string): Promise<string[] | undefined> => {
+/** Statuses of a DO marks read passed through as-is instead of becoming a 502. */
+const passThroughStatuses: ReadonlySet<number> = new Set([401, 403])
+
+/** Fulfilled donation ids from the DO, or the response to return instead. */
+const readFulfilled = async (
+  env: ChannelEnv,
+  channelId: string,
+  auth: ForwardedAuth
+): Promise<string[] | Response> => {
   try {
-    const response = await fetchChannel(env, key, '/marks')
-    if (!response.ok) return undefined
+    const response = await fetchChannel(env, channelId, '/marks', undefined, auth)
+    if (passThroughStatuses.has(response.status)) return response
+    if (!response.ok) return text('Could not read dock marks', 502)
     const marks = marksSchema.safeParse(await response.json())
-    return marks.success ? marks.data.fulfilled : undefined
+    return marks.success ? marks.data.fulfilled : text('Could not read dock marks', 502)
   } catch {
-    return undefined
+    return text('Could not read dock marks', 502)
   }
 }
 
-/** `GET /pending?host=&pid=&incentiveId=…`: every redemption not marked fulfilled, oldest first. */
+/**
+ * `GET /pending?host=&pid=&incentiveId=…`: every redemption not marked fulfilled, oldest first.
+ * The marks are read first, so the DO verifies the credential before DonorDrive is called.
+ */
 const handlePending = async (
-  request: Request,
   url: URL,
-  key: string,
+  channelId: string,
   env: ChannelEnv,
+  auth: ForwardedAuth,
   fetchAll: AllDonationsFetcher
 ): Promise<Response> => {
-  if (request.method !== 'GET') return text('Method not allowed', 405, { Allow: 'GET, OPTIONS' })
-
   const host = url.searchParams.get('host')
   const pid = url.searchParams.get('pid')
   const incentiveIds = url.searchParams.getAll('incentiveId')
@@ -96,8 +109,10 @@ const handlePending = async (
     return text('Invalid incentiveId', 400)
   }
 
-  const [fulfilled, result] = await Promise.all([readFulfilled(env, key), fetchAll({ host, pid })])
-  if (!fulfilled) return text('Could not read dock marks', 502)
+  const fulfilled = await readFulfilled(env, channelId, auth)
+  if (fulfilled instanceof Response) return fulfilled
+
+  const result = await fetchAll({ host, pid })
   if (!result.ok) return upstreamFailure(result.error)
 
   const events = pendingRedemptionEvents({
@@ -110,39 +125,50 @@ const handlePending = async (
   return Response.json({ events }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
+/** Path and query to forward, without the `token` credential. */
+const forwardedPathAndQuery = (subPath: string, url: URL): string => {
+  const params = new URLSearchParams(url.search)
+  params.delete('token')
+  const query = params.toString()
+  return query ? `${subPath}?${query}` : subPath
+}
+
 /**
- * Validates the dock key and forwards the request (WebSocket upgrade, `/events`, `/marks`)
- * to the DockChannel Durable Object named after it. `/pending` is answered by the Worker.
- * `/pending` and `/marks` allow cross-origin calls.
+ * Checks the channel ID, the action, the credential (`Authorization: Bearer` or `?token=`), the
+ * role's permission and the rate limit, then forwards the request (WebSocket upgrade, `/events`,
+ * `/marks`) to the channel's DockChannel object, which verifies the credential hash. `/pending`
+ * is answered by the Worker. `/pending` and `/marks` allow cross-origin calls, errors included.
  */
 export const handleChannelRequest = async (
   request: Request,
-  key: string,
+  channelId: string,
   env: ChannelEnv,
   deps: ChannelRequestDeps = {}
 ): Promise<Response> => {
-  // MVP-SHORTCUT(MVP-05): the dock key is the only auth for subscribing, publishing and marks; no rate limit
-  if (!DOCK_KEY_PATTERN.test(key)) return text('Invalid dock key', 400)
+  if (!CHANNEL_ID_PATTERN.test(channelId)) return text('Invalid channel ID', 400)
 
   const url = new URL(request.url)
-  const subPath = channelSubPath(url.pathname, key)
+  const subPath = channelSubPath(url.pathname, channelId)
   const cors = corsSubPaths.has(subPath)
+  const finish = (response: Response): Response => (cors ? withCors(response) : response)
 
   if (cors && request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }
-  if (subPath === PENDING_SUB_PATH) {
-    const response = await handlePending(
-      request,
-      url,
-      key,
-      env,
-      deps.fetchAllDonations ?? fetchAllDonations
-    )
-    return withCors(response)
-  }
-  if (!isChannelSubPath(subPath)) return text('Not found', 404)
 
-  const response = await fetchChannel(env, key, `${subPath}${url.search}`, request)
-  return cors ? withCors(response) : response
+  const action = actionFor(subPath, request.method)
+  if (!action) return text('Not found', 404)
+  if (action === 'method_not_allowed') return finish(text('Method not allowed', 405))
+
+  const credential = readRequestCredential(request, url)
+  const auth = await authorizeChannelCall(env, channelId, credential, action)
+  if (auth instanceof Response) return finish(auth)
+
+  if (subPath === PENDING_SUB_PATH) {
+    const fetchAll = deps.fetchAllDonations ?? fetchAllDonations
+    return finish(await handlePending(url, channelId, env, auth, fetchAll))
+  }
+
+  const pathAndQuery = forwardedPathAndQuery(subPath, url)
+  return finish(await fetchChannel(env, channelId, pathAndQuery, request, auth))
 }
